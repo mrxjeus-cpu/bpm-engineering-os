@@ -9,6 +9,8 @@
 3. **INV-03** Không transition trạng thái nếu thiếu evidence tương ứng (RULES-001).
 4. **INV-04** Không xóa/đổi business logic ngoài scope task. Mọi deletion phải nằm trong allowlist.
 5. **INV-05** Architecture phải qua human gate trước implementation (trừ mode hạ rủi ro có cấu hình).
+   Bypass chỉ khi `config/gates.yaml` cho phép (vd `bypassIfRiskAtMost: LOW` + cờ `--allow-bypass`) và **phải ghi vết**
+   vào `task.json → gateBypasses` (gateId → lý do) + event `HumanGateBypassed`; không được lẫn với người duyệt thật.
 6. **INV-06** MCP không available ⇒ `BLOCKED`. **Không** tự suy diễn/bịa domain data.
 7. **INV-07** Không hard-code một LLM provider hay một agent frontend.
 8. **INV-08** Business logic BPM không nằm trong orchestration runtime.

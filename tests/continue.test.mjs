@@ -16,8 +16,10 @@ const HARNESS = path.join(REPO_ROOT, "tests", "fixtures", "harness", "write-repo
 const FIXTURE_SOURCE = path.join(REPO_ROOT, "tests", "fixtures", "sample-repo");
 
 const CT = "CT-2000"; // NEW → human gate → DONE bằng eng continue
+const LOWBYPASS = "CT-2002"; // risk LOW + --allow-bypass (cờ phải xuống được tới phase)
+const LOWNOFLAG = "CT-2003"; // risk LOW, KHÔNG cờ ⇒ vẫn phải dừng ở human gate
 const DRY = "CT-2001"; // --dry-run
-const ALL = [CT, DRY];
+const ALL = [CT, DRY, LOWBYPASS, LOWNOFLAG];
 
 /** Toàn bộ status của state machine (spec 8.1) — dùng để kiểm bảng ánh xạ pha. */
 const STATUSES = [
@@ -206,6 +208,34 @@ describe("eng continue — chạy thật", () => {
     assert.equal(state(CT).status, "DONE");
     assert.equal(state(CT).history.length, before, "không được ghi thêm transition");
     assert.match(result.stdout, /dừng vì : DONE/);
+  });
+
+  it("--allow-bypass: cờ ĐƯỢC TRUYỀN xuống phase (risk LOW ⇒ gate architecture bị bypass)", async () => {
+    await runCli(["new", LOWBYPASS, "--title", "low bypass", "--risk", "LOW"], env());
+    for (const status of ["TRANSLATING", "REQUIREMENT_ANALYSIS", "IMPACT_ANALYSIS", "DESIGNING", "WAITING_DESIGN_APPROVAL"]) {
+      assert.equal((await runCli(["advance", LOWBYPASS, "--to", status], env())).code, 0, status);
+    }
+    const result = await runCli(
+      ["continue", LOWBYPASS, "--harness", "writer", "--project", "sample-fixture", "--allow-bypass", "--max-steps", "1"],
+      env(),
+    );
+    // Điểm mấu chốt: KHÔNG dừng ở HUMAN_GATE nữa — phase plan chạy và qua gate
+    assert.doesNotMatch(result.stdout, /dừng vì : HUMAN_GATE/);
+    assert.equal(state(LOWBYPASS).status, "READY_TO_IMPLEMENT");
+    assert.match(state(LOWBYPASS).gateBypasses.architecture, /risk LOW/);
+  });
+
+  it("risk LOW mà KHÔNG có cờ ⇒ vẫn dừng ở human gate (không tự bypass)", async () => {
+    await runCli(["new", LOWNOFLAG, "--title", "low no flag", "--risk", "LOW"], env());
+    for (const status of ["TRANSLATING", "REQUIREMENT_ANALYSIS", "IMPACT_ANALYSIS", "DESIGNING", "WAITING_DESIGN_APPROVAL"]) {
+      assert.equal((await runCli(["advance", LOWNOFLAG, "--to", status], env())).code, 0, status);
+    }
+    const result = await runCli(["continue", LOWNOFLAG, "--harness", "writer", "--max-steps", "1"], env());
+    assert.match(result.stdout, /dừng vì : HUMAN_GATE/);
+    assert.equal(state(LOWNOFLAG).status, "WAITING_DESIGN_APPROVAL");
+    // requirements/impact bị bỏ qua THEO MODE (normal) là đúng; architecture thì KHÔNG được bỏ qua
+    assert.equal(state(LOWNOFLAG).gateBypasses.architecture, undefined, "không được tự bypass architecture");
+    assert.match(state(LOWNOFLAG).gateBypasses.requirements, /mode "normal"/);
   });
 
   it("--json trả stoppedBecause + steps cho CI đọc", async () => {

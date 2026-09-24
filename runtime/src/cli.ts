@@ -65,7 +65,7 @@ const USAGE = `eng — BPM Engineering OS CLI
   eng evidence <TASK_ID> [--type TYPE] [--json]
   eng record <TASK_ID> --type TYPE --status PASS|FAIL|BLOCKED|INFO [--summary TEXT]
               [--project P] [--command C] [--cwd D] [--exit-code N] [--git-sha S] [--artifact A]
-              [--gate-id G] [--approver U] [--approved-at ISO] [--unexpected a,b] [--deleted a,b]
+              [--gate-id G] [--approver U] [--approved-at ISO] [--comment TEXT] [--unexpected a,b] [--deleted a,b]
               [--sub-task TASK-NN] [--producer WHO]
   eng events <TASK_ID> [--limit N] [--json]
   eng metrics <TASK_ID> [--json] [--write]   # metrics thật từ state/evidence/context (spec mục 21)
@@ -98,10 +98,10 @@ Song song + khoá:
 
 Phase (spec mục 9.1 — gói sẵn chuỗi bước của một pha):
   eng translate|analyze|design|plan|implement|review|audit|verify <TASK_ID>
-      [--harness NAME] [--project P] [--dry-run] [--no-recover] [--json]
+      [--harness NAME] [--project P] [--dry-run] [--no-recover] [--allow-bypass] [--json]
 
 Chạy liên tiếp (khuyến nghị cho việc hằng ngày):
-  eng continue <TASK_ID> [--harness NAME] [--project P] [--max-steps N] [--dry-run] [--no-recover]
+  eng continue <TASK_ID> [--harness NAME] [--project P] [--max-steps N] [--dry-run] [--no-recover] [--allow-bypass]
       # đọc state → chạy các pha kế tiếp cho tới khi: DONE | human gate | evidence gate | phải merge | lỗi
 
 Ghi chú: đổi status bắt buộc qua "advance" (đi qua evidence gate INV-03 và human gate INV-05).
@@ -114,6 +114,49 @@ interface ParsedArgs {
   positional: string[];
   flags: Map<string, string | true>;
   repeated: Map<string, string[]>;
+}
+
+/**
+ * Mọi flag CLI hợp lệ. Cờ lạ ⇒ LỖI rõ ràng thay vì im lặng bỏ qua — gõ nhầm `--allow-bypas`
+ * mà không có tín hiệu nào là lỗi an toàn (tưởng đã bypass / tưởng đã truyền tham số).
+ */
+const KNOWN_FLAGS = new Set([
+  "all", "allow-bypass", "allow-protected", "apply", "approved-at", "approver", "architecture-ref",
+  "artifact", "by", "capability", "command", "comment", "concurrency", "cwd", "deleted", "domain",
+  "dry-run", "exit-code", "expect", "file", "gate-id", "git-sha", "harness", "json", "limit",
+  "max-attempts", "max-steps", "max-tokens", "mode", "no-mcp", "no-recover", "no-skills", "objective",
+  "parallel", "phase", "ping", "producer", "project", "projects", "reason", "release", "risk", "run",
+  "set", "start", "status", "sub-task", "summary", "title", "to", "type", "unexpected", "write",
+]);
+
+/** Khoảng cách sửa đổi đơn giản — chỉ để gợi ý khi người dùng gõ nhầm flag. */
+function editDistance(a: string, b: string): number {
+  const rows = a.length + 1;
+  const cols = b.length + 1;
+  let prev = Array.from({ length: cols }, (_, j) => j);
+  for (let i = 1; i < rows; i += 1) {
+    const current = [i, ...Array.from({ length: cols - 1 }, () => 0)];
+    for (let j = 1; j < cols; j += 1) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      current[j] = Math.min((prev[j] as number) + 1, (current[j - 1] as number) + 1, (prev[j - 1] as number) + cost);
+    }
+    prev = current;
+  }
+  return prev[cols - 1] as number;
+}
+
+function assertKnownFlags(args: ParsedArgs): void {
+  const unknown = [...args.flags.keys()].filter((name) => !KNOWN_FLAGS.has(name));
+  if (unknown.length === 0) return;
+  const suggestions = unknown.map((name) => {
+    const best = [...KNOWN_FLAGS]
+      .map((candidate) => ({ candidate, distance: editDistance(name, candidate) }))
+      .sort((a, b) => a.distance - b.distance)[0];
+    return best !== undefined && best.distance <= 3 ? `--${name} (ý bạn là --${best.candidate}?)` : `--${name}`;
+  });
+  throw new EngError("UNKNOWN_FLAG", `Flag không tồn tại: ${suggestions.join(", ")}`, {
+    hint: 'Xem `eng help` để biết flag hợp lệ. Cờ lạ bị từ chối thay vì bỏ qua âm thầm.',
+  });
 }
 
 const REPEATABLE_FLAGS = new Set(["set", "project"]);
@@ -332,6 +375,8 @@ function evidenceFromFlags(args: ParsedArgs): NewEvidence {
   if (deleted !== undefined) evidence["deletedFiles"] = deleted === "" ? [] : deleted.split(",");
   const producer = flag(args, "producer");
   if (producer) evidence["producer"] = producer;
+  const comment = flag(args, "comment");
+  if (comment) evidence["comment"] = comment;
 
   return evidence as NewEvidence;
 }
@@ -362,6 +407,7 @@ async function runPhaseCli(args: ParsedArgs, phase: PhaseName, taskId: string): 
     ...(args.flags.has("dry-run") ? { dryRun: true } : {}),
     ...(args.flags.has("no-recover") ? { noRecover: true } : {}),
     ...(args.flags.has("parallel") ? { parallel: true } : {}),
+    ...(args.flags.has("allow-bypass") ? { allowBypass: true } : {}),
     ...(flag(args, "concurrency") ? { concurrency: Number.parseInt(flag(args, "concurrency") as string, 10) } : {}),
     ...(json ? {} : { onProgress: (message: string) => process.stdout.write(`  … ${message}\n`) }),
   });
@@ -392,6 +438,7 @@ async function runPhaseCli(args: ParsedArgs, phase: PhaseName, taskId: string): 
 
 export async function runCli(argv: string[]): Promise<number> {
   const args = parseArgs(argv);
+  assertKnownFlags(args);
   const store = new StateStore();
   const bus = new EventBus();
   const evidenceStore = new EvidenceStore({ bus });
@@ -651,6 +698,7 @@ export async function runCli(argv: string[]): Promise<number> {
         ...(maxSteps !== undefined && !Number.isNaN(maxSteps) ? { maxSteps } : {}),
         ...(args.flags.has("dry-run") ? { dryRun: true } : {}),
         ...(args.flags.has("no-recover") ? { noRecover: true } : {}),
+        ...(args.flags.has("allow-bypass") ? { allowBypass: true } : {}),
         ...(json ? {} : { onProgress: (message: string) => process.stdout.write(`  … ${message}\n`) }),
       });
 

@@ -226,7 +226,18 @@ $E record $T --type HUMAN_APPROVAL --status PASS --gate-id architecture \
 $E advance $T --to PLANNING        # ✓
 ```
 
-Không nới gate bằng `--allow-bypass` trừ khi `config/gates.yaml` cho phép.
+Không nới gate bằng `--allow-bypass` trừ khi `config/gates.yaml` cho phép. Quy tắc hiện tại
+(`config/gates.yaml → gates[architecture]`): **chỉ risk LOW**, và **phải có cờ** (`bypassRequiresConfigFlag: true`) —
+risk LOW mà không có cờ thì vẫn bị chặn. Cờ dùng được ở `eng advance`, **mọi lệnh phase** và `eng continue`:
+
+```bash
+$E continue $T --harness $H --project $P --allow-bypass   # risk LOW ⇒ qua gate architecture, có ghi vết
+```
+
+Bypass **luôn để lại vết** — `task.json → gateBypasses` + event `HumanGateBypassed`, nên phân biệt được
+"bị bỏ qua" với "người đã duyệt"; `eng metrics` hiện `— BYPASSED (<lý do>)`.
+
+⚠️ Cờ gõ sai **không** bị bỏ qua âm thầm nữa: `--allow-bypas` ⇒ `UNKNOWN_FLAG` kèm gợi ý cờ gần đúng.
 
 ### 5.2 Evidence gate (INV-03 / RULES-001)
 

@@ -68,6 +68,10 @@ Thêm `--dry-run` để xem các bước mà KHÔNG gọi LLM và không đổi 
 
 ## Hai điểm dừng bắt buộc (không phải lỗi)
 
+> **Risk LOW**: gate architecture có thể bỏ qua nếu có cờ — `... --allow-bypass` (dùng được ở phase và `eng continue`).
+> Bypass luôn ghi vết: `task.json → gateBypasses` + event `HumanGateBypassed`; `eng metrics` hiện `— BYPASSED (lý do)`.
+> Gõ sai cờ (`--allow-bypas`) bị từ chối `UNKNOWN_FLAG`, không im lặng.
+
 1. **Human gate kiến trúc**: sau `design`, phải có người duyệt rồi mới `plan`:
 
 ```bash
