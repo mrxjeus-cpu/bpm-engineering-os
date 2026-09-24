@@ -16,8 +16,10 @@ const FIXTURE_SOURCE = path.join(REPO_ROOT, "tests", "fixtures", "sample-repo");
 
 const C = "CX-0100"; // provider giả (unit)
 const O = "CX-0101"; // CLI --no-mcp (offline)
-const M = "CX-0102"; // CLI + MCP thật
-const ALL = [C, O, M];
+const M = "CX-0102"; // CLI + MCP thật (domain BẬT)
+const D = "CX-0103"; // CLI + MCP thật (domain TẮT theo config mặc định)
+const ALL = [C, O, M, D];
+let mcpConfigDomainOn;
 
 const PLAN_MARKDOWN = `# Implementation Plan — context test
 
@@ -294,6 +296,14 @@ describe("CLI context — MCP thật trên repo fixture", () => {
     assert.equal(created.code, 0, created.stderr);
     const imported = await runCli(["plan", "import", M, "--file", planFile()]);
     assert.equal(imported.code, 0, imported.stderr);
+
+    // Nhánh domain chỉ chạy khi mcp-domain-core ĐANG BẬT (mặc định trong repo là tạm dừng).
+    // Sửa đúng dòng cấu hình trong block mcp-domain-core (comment cũng chứa chuỗi "enabled: false").
+    const source = readFileSync(path.join(REPO_ROOT, "config", "mcp.yaml"), "utf8");
+    const withDomainOn = source.replace(/(mcp-domain-core:[\s\S]*?)\n(\s*)enabled: false/, "$1\n$2enabled: true");
+    assert.match(withDomainOn, /mcp-domain-core:[\s\S]*?enabled: true/, "phải bật được domain trong config tạm");
+    mcpConfigDomainOn = path.join(tmpdir(), `ctx-mcp-domain-on-${Date.now()}.yaml`);
+    writeFileSync(mcpConfigDomainOn, withDomainOn, "utf8");
   });
 
   after(() => {
@@ -304,6 +314,7 @@ describe("CLI context — MCP thật trên repo fixture", () => {
   it("lấy được snippet symbol từ repo và ghi provenance MCP", async () => {
     const result = await runCli(["context", M, "TASK-01", "--project", "sample-fixture"], {
       SAMPLE_FIXTURE_REPO_ROOT: fixture.dir,
+      MCP_CONFIG: mcpConfigDomainOn,
     });
     assert.equal(result.code, 0, result.stderr);
     assert.match(result.stdout, /MCP call/);
@@ -340,5 +351,32 @@ describe("CLI context — MCP thật trên repo fixture", () => {
       context.constraints.some((constraint) => /PolicyInputMapper|MUST NOT/.test(constraint)),
       `constraints hiện có: ${context.constraints.join(" | ")}`,
     );
+  });
+
+  it("mcp-domain-core TẮT theo config mặc định: context vẫn chạy, có cảnh báo, KHÔNG suy diễn policy", async () => {
+    assert.equal((await runCli(["new", D, "--title", "domain tạm dừng", "--risk", "HIGH"])).code, 0);
+    assert.equal((await runCli(["plan", "import", D, "--file", planFile()])).code, 0);
+
+    // KHÔNG truyền MCP_CONFIG ⇒ dùng config/mcp.yaml của repo (domain đang tạm dừng).
+    const result = await runCli(["context", D, "TASK-01", "--project", "sample-fixture"], {
+      SAMPLE_FIXTURE_REPO_ROOT: fixture.dir,
+    });
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stdout, /MCP đang TẮT theo config \(mcp-domain-core\)/);
+    assert.match(result.stdout, /KHÔNG được suy diễn/);
+
+    const context = readContext(D, "TASK-01");
+    // mcp-engineering vẫn chạy đủ
+    const tools = context.provenance.mcpQueries.map((query) => `${query.server}.${query.tool}`);
+    assert.ok(tools.some((tool) => tool.startsWith("mcp-engineering.")), "mcp-engineering phải vẫn chạy");
+    assert.ok(tools.includes("mcp-engineering.get_change_context"));
+    // và KHÔNG có call nào sang domain
+    assert.equal(tools.filter((tool) => tool.startsWith("mcp-domain-core.")).length, 0);
+    assert.equal(
+      (context.businessRules ?? []).filter((rule) => rule.source.includes("mcp-domain-core")).length,
+      0,
+      "không được lấy rule từ domain khi domain tắt",
+    );
+    assert.ok(context.symbols.length > 0, "vẫn phải có symbol từ repo");
   });
 });

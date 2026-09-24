@@ -781,6 +781,11 @@ Trong banking, tiết kiệm $0.10 không đáng nếu dẫn tới **wrong polic
 
 - Chỉ 2 MCP ở Phase 1: `mcp-engineering`, `mcp-domain-core`.
 - Mỗi MCP expose **~10–20 high-level tools**, không phải 100.
+- **Bật/tắt ở cấp SERVER**: mỗi server khai `enabled: true|false` trong `config/mcp.yaml`.
+  `false` = **TẠM DỪNG**: runtime không spawn tiến trình, ContextCompiler không gọi, `eng doctor`
+  chỉ ghi chú (không FAIL), `eng context` in cảnh báo rõ. Code/dataset vẫn nằm trong repo để bật lại 1 dòng.
+  **Trạng thái Phase 1: `mcp-domain-core` đang TẠM DỪNG** (lý do ở 13.3) ⇒ context chỉ có dữ liệu kỹ thuật
+  từ `mcp-engineering`, và **cấm suy diễn** policy/rule khi thiếu nguồn (INV-06).
 - **Capability routing theo task metadata**: chỉ enable MCP/toolset liên quan.
 - Kết quả MCP phải: nhỏ, có cấu trúc, có ID, có source/reference, có confidence (nếu semantic), có pagination, không duplicate.
 - MCP **không** quyết định workflow; skill **không** chứa data.
@@ -824,6 +829,12 @@ task/state   get_task_state · update_task_state · record_evidence · emit_even
 `validate_change_scope(taskId, allowedFiles)` → `{ unexpectedFiles, deletedFiles, status }`.
 
 ### 13.3 `mcp-domain-core` — domain intelligence
+
+> ⏸ **TẠM DỪNG ở Phase 1** (`config/mcp.yaml → servers.mcp-domain-core.enabled: false`).
+> Lý do: mô hình nguồn nghiệp vụ hiện tại (một thư mục JSON synthetic) chưa khớp với cách tổ chức
+> thực tế — nhiều **hệ thống**, mỗi hệ thống nhiều **repo** (BE/FE, core theo sản phẩm), và policy
+> có thể đến từ nhiều nguồn khác schema. Khi nào nguồn thật + trục chia được chốt thì bật lại
+> (`enabled: true`), hoặc tách theo nguồn qua `routing.byDomain` (tiền lệ: `mcp-card`, `mcp-deposit`).
 
 ```text
 product   find_product · get_product

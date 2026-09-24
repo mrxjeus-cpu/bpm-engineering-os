@@ -314,6 +314,11 @@ export function checkMcp(): DoctorCheck {
       problems.push(`${name}: server không có trong runtime (chỉ có ${Object.keys(MCP_GROUPS).join(", ")})`);
       continue;
     }
+    // Server tạm dừng (enabled: false): không bắt build/group — chỉ ghi chú trạng thái.
+    if (server.enabled === false) {
+      notes.push(`${name}: ĐANG TẮT (enabled: false trong config/mcp.yaml) — bật lại bằng enabled: true`);
+      continue;
+    }
     const groups = Object.keys(server.groups ?? {});
     const unknownGroups = groups.filter((group) => !known.includes(group));
     if (unknownGroups.length > 0) problems.push(`${name}: group lạ ${unknownGroups.join(", ")} (chỉ có ${known.join(", ")})`);
@@ -328,6 +333,10 @@ export function checkMcp(): DoctorCheck {
     if (servers === undefined) problems.push(`routing.byPhase thiếu phase "${phase}"`);
     else for (const server of servers) {
       if (!(server in config.mcp.servers)) problems.push(`routing.byPhase.${phase} trỏ tới server chưa khai báo: ${server}`);
+      else if (config.mcp.servers[server]?.enabled === false) {
+        const note = `${server}: ĐANG TẮT nhưng routing.byPhase.${phase} vẫn trỏ tới — bỏ qua (routing không được thực thi)`;
+        if (!notes.includes(note)) notes.push(note);
+      }
     }
   }
   const byDomain = Object.entries(config.mcp.routing.byDomain);

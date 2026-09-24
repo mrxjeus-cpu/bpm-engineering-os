@@ -72,13 +72,18 @@ function finish(checks: DoctorCheck[], options: DoctorOptions): DoctorReport {
   };
 }
 
-/** Bằng chứng thật: spawn từng MCP server đã cấu hình và list tool. */
+/** Bằng chứng thật: spawn từng MCP server ĐANG BẬT và list tool. Server tắt chỉ ghi chú. */
 export async function checkMcpPing(timeoutMs: number): Promise<DoctorCheck> {
   const config = loadConfig();
   const names = Object.keys(config.mcp.servers);
   const results: string[] = [];
   const failures: string[] = [];
   for (const name of names) {
+    // Server tạm dừng: không spawn, nêu rõ trạng thái thay vì im lặng.
+    if (config.mcp.servers[name]?.enabled === false) {
+      results.push(`${name}: TẮT (enabled: false)`);
+      continue;
+    }
     const client = new McpStdioClient(serverSpecFromConfig(name), { timeoutMs });
     try {
       await client.start();

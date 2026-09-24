@@ -257,7 +257,7 @@ Risk `CRITICAL` cần thêm `HUMAN_APPROVAL` gateId `finalVerification` trước
 
 `tests/plan-graph.test.mjs` (23 test) — parser (kể cả code fence và lỗi thiếu field), DAG (wave, cycle, self/unknown dependency), conflict detection (đủ 4 loại), execution plan (SEQUENTIAL/PARALLEL, `blocked` khi có cycle), và luồng CLI `plan import → graph → wave → subtask` (kể cả các nhánh bị chặn).
 
-`tests/context-compiler.test.mjs` (13 test) — compiler với provider giả (gộp 4 nguồn constraints, business rule của plan + MCP, cắt theo budget, unknown thay vì bịa), CLI offline `--no-mcp`, và **CLI với 2 MCP server thật** trên repo fixture (snippet symbol + provenance MCP + rule từ mcp-domain-core + constraint từ repo).
+`tests/context-compiler.test.mjs` (13 test) — compiler với provider giả (gộp 4 nguồn constraints, business rule của plan + MCP, cắt theo budget, unknown thay vì bịa), CLI offline `--no-mcp`, và **CLI với MCP thật** trên repo fixture (snippet symbol + provenance MCP + constraint từ repo; nhánh lấy rule từ `mcp-domain-core` chỉ chạy khi server đó được bật, cộng 1 test cho trạng thái tạm dừng).
 
 `tests/agent-runner.test.mjs` (20 test) — prompt contract 9 phần (thứ tự, placeholder, không lặp DO NOT, **không nhúng nội dung context — INV-01**), ModelRouter (role/risk/complexity/caps), dry run, `CONTEXT_REQUIRED`, `HARNESS_NOT_CONFIGURED` (INV-07), harness thật ghi artifact + harness fail, và `wave --run`.
 

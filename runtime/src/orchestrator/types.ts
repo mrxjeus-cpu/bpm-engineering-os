@@ -54,7 +54,7 @@ export const PHASES: Record<PhaseName, PhaseSpec> = {
     allowedFrom: ["REQUIREMENT_ANALYSIS", "IMPACT_ANALYSIS"],
     steps: [
       "advance → IMPACT_ANALYSIS",
-      "chạy agent impact (dùng mcp-engineering + mcp-domain-core) → impact.md",
+      "chạy agent impact (mcp-engineering; mcp-domain-core nếu đang bật) → impact.md",
       "kiểm artifact impact.md",
       "advance → DESIGNING",
     ],

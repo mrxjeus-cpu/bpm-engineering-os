@@ -1,4 +1,5 @@
 import { EngError } from "../errors.js";
+import { mcpServerEnabled } from "../config/index.js";
 import { McpStdioClient, serverSpecFromConfig, type McpServerSpec } from "../mcp/client.js";
 import type { ContextBusinessRule, ContextLimits, ContextSymbol } from "./types.js";
 import { DEFAULT_CONTEXT_LIMITS } from "./types.js";
@@ -26,6 +27,11 @@ export interface ContextGathering {
   unknowns: string[];
   mcpQueries: Array<{ server: string; tool: string; args?: Record<string, unknown> }>;
   unavailable: string[];
+  /**
+   * Server bị TẮT theo config (`enabled: false`) — khác "không dùng được": đây là chủ ý.
+   * Optional để provider tự viết (ngoài repo) không bị vỡ khi nâng cấp.
+   */
+  disabled?: string[];
 }
 
 /**
@@ -51,6 +57,7 @@ function emptyGathering(input: GatherInput): ContextGathering {
     unknowns: [],
     mcpQueries: [],
     unavailable: [],
+    disabled: [],
   };
 }
 
@@ -131,6 +138,7 @@ export class McpContextProvider implements ContextProviders {
   #domain?: McpStdioClient;
   #started = false;
   #unavailable: string[] = [];
+  #disabled: string[] = [];
 
   constructor(options: McpProviderOptions = {}) {
     this.#options = options;
@@ -155,6 +163,12 @@ export class McpContextProvider implements ContextProviders {
     if (this.#started) return;
     this.#started = true;
     for (const server of ["engineering", "domain"] as const) {
+      const serverName = server === "engineering" ? "mcp-engineering" : "mcp-domain-core";
+      // Server bị tạm dừng theo config ⇒ KHÔNG spawn, ghi nhận riêng (không phải lỗi).
+      if (!mcpServerEnabled(serverName)) {
+        this.#disabled.push(serverName);
+        continue;
+      }
       try {
         await this.#client(server).start();
       } catch (error) {
@@ -167,15 +181,16 @@ export class McpContextProvider implements ContextProviders {
     await this.#ensureStarted();
     const gathering = emptyGathering(input);
     gathering.unavailable = [...this.#unavailable];
+    gathering.disabled = [...this.#disabled];
 
     for (const name of this.#unavailable) {
       gathering.unknowns.push(`MCP không dùng được (${name}) — context thiếu phần dữ liệu tương ứng.`);
     }
 
-    if (!this.#unavailable.includes("engineering")) {
+    if (!this.#unavailable.includes("engineering") && !this.#disabled.includes("mcp-engineering")) {
       await this.#gatherFromEngineering(input, gathering);
     }
-    if (!this.#unavailable.includes("domain")) {
+    if (!this.#unavailable.includes("domain") && !this.#disabled.includes("mcp-domain-core")) {
       await this.#gatherFromMbsm(input, gathering);
     }
 

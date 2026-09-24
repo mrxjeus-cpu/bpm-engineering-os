@@ -77,7 +77,18 @@ export interface McpConfig {
       maxSkillTokens?: number;
     };
   };
-  servers: Record<string, { transport?: string; command?: string; args?: string[]; groups?: Record<string, boolean>; [key: string]: unknown }>;
+  servers: Record<
+    string,
+    {
+      /** false ⇒ server bị TẠM DỪNG: runtime không spawn, context không gọi, doctor chỉ ghi chú. */
+      enabled?: boolean;
+      transport?: string;
+      command?: string;
+      args?: string[];
+      groups?: Record<string, boolean>;
+      [key: string]: unknown;
+    }
+  >;
 }
 
 export interface ProjectConfig {
@@ -274,6 +285,27 @@ export function projectNames(): string[] {
   return Object.keys(loadConfig().projects.projects);
 }
 
+/**
+ * MCP server có đang bật không. `enabled: false` = TẠM DỪNG (config/mcp.yaml):
+ * runtime không spawn tiến trình, context compiler không gọi, doctor chỉ ghi chú.
+ * Mặc định bật khi không khai `enabled`.
+ */
+export function mcpServerEnabled(name: string): boolean {
+  const server = loadConfig().mcp.servers[name];
+  if (!server) return false;
+  return server.enabled !== false;
+}
+
+/** MCP server đang bật (dùng để spawn/ping/route). */
+export function enabledMcpServers(): string[] {
+  return Object.keys(loadConfig().mcp.servers).filter((name) => mcpServerEnabled(name));
+}
+
+/** MCP server đang tạm dừng — nêu rõ lý do trong thông báo, không im lặng. */
+export function disabledMcpServers(): string[] {
+  return Object.keys(loadConfig().mcp.servers).filter((name) => !mcpServerEnabled(name));
+}
+
 /** repoRoot của project đích, đã resolve env/default. Không có ⇒ null (không đoán — INV-06). */
 export function resolveRepoRoot(project?: string): string | null {
   const { config } = projectConfig(project);
@@ -301,6 +333,8 @@ export function configSummary(): Record<string, unknown> {
     modelTiers: config.models.tiers,
     agentModels: config.models.agents,
     mcpServers: Object.keys(config.mcp.servers),
+    mcpServersEnabled: Object.keys(config.mcp.servers).filter((name) => config.mcp.servers[name]?.enabled !== false),
+    mcpServersDisabled: Object.keys(config.mcp.servers).filter((name) => config.mcp.servers[name]?.enabled === false),
     mcpGroups: Object.fromEntries(
       Object.entries(config.mcp.servers).map(([name, server]) => [name, Object.keys(server.groups ?? {})]),
     ),

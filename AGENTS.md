@@ -13,7 +13,7 @@ Repo này là **BPM Engineering OS** (skeleton Phase 1). Nguồn chân lý thi�
 | Feature sửa nhiều repo (1 ticket = n repo) | spec mục 9.5 · `GETTING-STARTED.md` mục 9 · `config/projects.yaml` |
 | Hợp đồng dữ liệu state/evidence/plan | `schemas/*.schema.json` |
 | Tool repo/code/git/verification | `mcp/mcp-engineering/src/` |
-| Tool domain DOMAIN | `mcp/mcp-domain-core/src/` |
+| Tool domain DOMAIN (⏸ tạm dừng, `enabled: false`) | `mcp/mcp-domain-core/src/` |
 | Việc còn phải làm | spec mục 18.1 (thứ tự 20 bước) |
 | Chạy 1 ticket thật | `RUNBOOK.md` (chuẩn bị máy → `eng doctor` → cấu hình repo/harness → 8 phase) |
 | Đo baseline | `eng metrics <TASK_ID>` (spec mục 21) |

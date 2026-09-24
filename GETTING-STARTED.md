@@ -22,7 +22,7 @@
 |---|---|---|
 | Cấu hình | `config/*.yaml` | model tier · gate · risk · MCP · project đích + **allowlist command** |
 | Runtime + CLI `eng` | `runtime/src` → `runtime/dist/cli.js` | state machine, evidence gate, plan→wave, context compiler, recovery |
-| MCP server (stdio) | `mcp/mcp-engineering` · `mcp/mcp-domain-core` | 31 + 17 tool: repo/code/git/verification và domain policy |
+| MCP server (stdio) | `mcp/mcp-engineering` *(đang dùng)* · `mcp/mcp-domain-core` *(⏸ tạm dừng: `enabled: false`)* | 31 tool: repo/code/git/verification. Domain-core giữ code nhưng chưa bật |
 
 **Nguyên tắc số 1 (INV-01/INV-02):** state sống **ngoài** context LLM, dạng file, trong `.engineering/workstreams/<TICKET>/`. Worker agent **không** nhận repo, không nhận `.engineering/`, không nhận lịch sử hội thoại — chỉ nhận `context/TASK-NN.md`.
 
@@ -85,7 +85,7 @@ Output thật trên repo này:
 Kết luận: 11 ok · 3 warn · 0 fail          # eng doctor
 Kết luận: 12 ok · 3 warn · 0 fail          # eng doctor --ping
 ✔ mcp-ping — MCP server khởi động thật + list tool
-    mcp-engineering: 31 tool / 6 group · mcp-domain-core: 17 tool / 5 group
+    mcp-engineering: 31 tool / 6 group · mcp-domain-core: TẮT (enabled: false)
 ```
 
 3 WARN mặc định khi chưa cấu hình (không phải lỗi code):

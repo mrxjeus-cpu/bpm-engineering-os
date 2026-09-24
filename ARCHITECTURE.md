@@ -69,7 +69,7 @@ Trạng thái: ✅ đã implement · ⬜ chưa (theo thứ tự spec mục 18.1)
 
 | Ranh giới | Quy tắc |
 |---|---|
-| Runtime ↔ domain | Business logic BPM **không** nằm trong runtime; thuộc `mcp-domain-core` (**INV-08**) |
+| Runtime ↔ domain | Business logic BPM **không** nằm trong runtime; thuộc `mcp-domain-core` (**INV-08**). Server này hiện **tạm dừng** (`enabled: false`) — runtime chỉ dùng `mcp-engineering`; khi tắt thì worker **không được suy diễn** policy (INV-06) |
 | Worker ↔ context | Worker chỉ nhận `context/task-NN.md`, không nhận conversation/repo/plan đầy đủ (**INV-01**) |
 | Provider ↔ runtime | Không hard-code LLM provider hay agent frontend; model routing qua `config/models.yaml` (**INV-07**) |
 | Toolset ↔ phase | Chỉ expose group/tool liên quan phase hiện tại (**INV-10**) |
