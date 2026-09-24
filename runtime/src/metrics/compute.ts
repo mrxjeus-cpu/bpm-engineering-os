@@ -34,6 +34,8 @@ export interface GateEpisode {
   required: boolean;
   satisfied: boolean;
   bypassed: boolean;
+  /** Lý do bypass, đọc từ `task.json → gateBypasses` (không suy diễn từ approvals — INV-05/INV-12). */
+  bypassReason?: string;
   approver?: string | null;
 }
 
@@ -224,6 +226,9 @@ function gateEpisodes(state: TaskState, evidence: Evidence[]): GateEpisode[] {
     const available = evidence.filter((item) => Date.parse(item.timestamp) <= at);
     const check = checkHumanGates({ ...state, status: from }, entry.to, available)[0];
     if (!check) continue;
+    // Bypass được ghi vào state.gateBypasses lúc transition; checkHumanGates() ở đây KHÔNG có
+    // cờ allow-bypass của lần chạy đó nên không thể tự suy ra — đọc từ state mới đúng.
+    const bypassReason = state.gateBypasses?.[check.gateId];
     const next = history.slice(i + 1).find((item) => Date.parse(item.at) > at);
     const closedAt = next ? Date.parse(next.at) : Date.parse(state.updatedAt);
     episodes.push({
@@ -233,7 +238,8 @@ function gateEpisodes(state: TaskState, evidence: Evidence[]): GateEpisode[] {
       open: !next,
       required: check.required,
       satisfied: check.satisfied,
-      bypassed: check.bypassed,
+      bypassed: bypassReason !== undefined || check.bypassed,
+      ...(bypassReason !== undefined ? { bypassReason } : {}),
       approver: check.approver ?? null,
     });
   }
@@ -516,7 +522,7 @@ export function renderMetrics(metrics: TaskMetrics): string {
   for (const gate of metrics.process.humanGates) {
     lines.push(
       `- gate ${gate.gateId} (${gate.transition}): chờ ${formatDuration(gate.waitMs)}` +
-        `${gate.open ? " — đang mở" : ""}${gate.bypassed ? " — BYPASSED" : ""}` +
+        `${gate.open ? " — đang mở" : ""}${gate.bypassed ? ` — BYPASSED${gate.bypassReason ? ` (${gate.bypassReason})` : ""}` : ""}` +
         `${gate.approver ? ` · approver ${gate.approver}` : ""}`,
     );
   }

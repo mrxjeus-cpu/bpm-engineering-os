@@ -39,6 +39,8 @@ export interface RunPhaseOptions {
   /** Số task chạy song song tối đa (mặc định 3). */
   concurrency?: number;
   /** Cho phép cắt qua worktree cũ nếu đã tồn tại (mặc định true khi --parallel). */
+  /** Cho phép bỏ qua human gate nếu `config/gates.yaml` cho phép (vd risk LOW + bypassRequiresConfigFlag). */
+  allowBypass?: boolean;
   onProgress?: (message: string) => void;
 }
 
@@ -178,7 +180,11 @@ export class PhaseOrchestrator {
 
   #advance(ctx: Ctx, to: TaskStatus, name = `advance:${to}`): boolean {
     try {
-      this.#store.transition(ctx.taskId, to, { by: "runtime:phase", reason: `phase step → ${to}` });
+      this.#store.transition(ctx.taskId, to, {
+        by: "runtime:phase",
+        reason: `phase step → ${to}`,
+        ...(this.#options.allowBypass === true ? { allowBypass: true } : {}),
+      });
       ctx.steps.push({ name, status: "ok", detail: `→ ${to}` });
       return true;
     } catch (error) {

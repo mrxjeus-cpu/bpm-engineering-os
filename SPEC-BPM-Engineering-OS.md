@@ -712,9 +712,13 @@ DO NOT: rewrite existing logic · introduce framework unnecessarily ·
 | Gate | Vị trí | Bắt buộc | Bypass |
 |---|---|---|---|
 | Requirements gate | sau requirements | Không (mặc định) | mode autonomous |
-| **Architecture gate** | DESIGNING → PLANNING | **Có** | chỉ khi risk LOW + config |
+| **Architecture gate** | WAITING_DESIGN_APPROVAL → PLANNING | **Có** | chỉ khi risk LOW + config (`--allow-bypass`) |
 | Implementation-plan gate | PLAN → IMPLEMENT | Có nếu thay đổi lớn | config cho change nhỏ |
 | Evidence gate | mọi transition | **Có (INV-03)** | không |
+
+Mọi lần bỏ qua human gate đều ghi vết: `task.json → gateBypasses` (gateId → lý do) + history + event
+`HumanGateBypassed`; `eng metrics` đọc từ đó để báo `bypassed` (không suy ra từ `approvals` — INV-05/INV-12).
+Cờ `--allow-bypass` có ở `eng advance`, mọi lệnh phase và `eng continue`; cờ lạ bị CLI từ chối.
 | Scope gate | trước REVIEWING | **Có (INV-04)** | allowlist tường minh |
 
 ### 11.2 Risk engine

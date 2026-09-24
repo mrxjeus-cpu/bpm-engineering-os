@@ -96,8 +96,13 @@ eng continue TASK-49043 --harness <harness> --project individual-service
 | `NO_PHASE` | không còn phase nào chạy được từ status hiện tại |
 | `MAX_STEPS` | chạm trần `--max-steps` (mặc định 8) — chạy lại để tiếp |
 
-`--dry-run` chiếu các phase sẽ chạy (đọc gate từ config, không đổi state). `--json` trả
-`{ from, to, ok, blocked, stoppedBecause, steps[] }` để CI đọc. Không nới gate nào: mọi điểm dừng
+`--dry-run` chiếu các phase sẽ chạy (đọc gate từ config **và** tôn trọng `--allow-bypass`, không đổi state).
+`--json` trả `{ from, to, ok, blocked, stoppedBecause, steps[] }` để CI đọc.
+
+**Human gate & bypass**: `--allow-bypass` được truyền xuống phase (`eng plan`, `eng implement`, …) và `eng continue`.
+Bypass chỉ xảy ra khi `config/gates.yaml` cho phép (vd `bypassIfRiskAtMost: LOW` + `bypassRequiresConfigFlag`).
+Mọi lần bypass ghi `task.json → gateBypasses[gateId] = lý do` + event `HumanGateBypassed`; `eng metrics` đọc
+từ đó để báo `bypassed` kèm lý do. Cờ không tồn tại ⇒ `UNKNOWN_FLAG` (kèm gợi ý), **không** bỏ qua âm thầm. Không nới gate nào: mọi điểm dừng
 đều kèm việc phải làm tiếp.
 
 Ví dụ một vòng đời thật:

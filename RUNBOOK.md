@@ -110,6 +110,10 @@ node runtime/dist/cli.js record $T --type HUMAN_APPROVAL --status PASS `
 
 Không có approval thì `plan` sẽ báo `HUMAN_APPROVAL_REQUIRED` — đúng thiết kế, không phải lỗi.
 
+**Risk LOW**: `config/gates.yaml` cho phép bỏ qua gate architecture nếu có cờ — dùng được ở cả `eng advance`
+lẫn phase/`eng continue`: `... --allow-bypass`. Mọi lần bypass đều ghi `task.gateBypasses` + event
+`HumanGateBypassed` (phân biệt với người duyệt thật), và `eng metrics` hiện `— BYPASSED (lý do)`.
+
 ### 4.2 Plan → context → implement
 
 ```powershell

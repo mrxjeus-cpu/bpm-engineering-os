@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import {
   EventBus,
   StateStore,
+  collectMetrics,
   configSummary,
   loadConfig,
   validateWith,
@@ -18,7 +19,7 @@ const execFileAsync = promisify(execFile);
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const CLI = path.join(REPO_ROOT, "runtime", "dist", "cli.js");
 
-const TASK_IDS = ["RT-0100", "RT-0101", "RT-0102", "RT-0103", "RT-9001", "RT-9002", "RT-9003", "RT-9004"];
+const TASK_IDS = ["RT-0100", "RT-0101", "RT-0102", "RT-0103", "RT-9001", "RT-9002", "RT-9003", "RT-9004", "RT-9005", "RT-9006"];
 const A = "RT-0100"; // acceptance A: state qua restart
 const F = "RT-0101"; // acceptance F: evidence persist
 const G = "RT-0102"; // human gate
@@ -230,6 +231,49 @@ describe("runtime — state machine & evidence gate", () => {
     assert.equal(state.approvals.architecture, true);
   });
 
+  it("bypass để lại VẾT AUDIT: gateBypasses + history + event riêng + metrics đọc đúng", () => {
+    const id = "RT-9005";
+    store.create({ taskId: id, title: "bypass audit", risk: "LOW" });
+    for (const to of ["TRANSLATING", "REQUIREMENT_ANALYSIS", "IMPACT_ANALYSIS", "DESIGNING", "WAITING_DESIGN_APPROVAL"]) {
+      store.transition(id, to);
+    }
+    const state = store.transition(id, "PLANNING", { allowBypass: true });
+
+    // 1) state phân biệt được "bị bỏ qua" với "người đã duyệt"
+    assert.equal(state.gateBypasses.architecture, "risk LOW ≤ LOW + cờ allow-bypass");
+    assert.equal(state.approvals.architecture, true);
+    assert.equal(state.evidence.length, 0, "bypass KHÔNG tạo evidence HUMAN_APPROVAL giả");
+
+    // 2) history nêu rõ gate nào bị bỏ qua và vì sao
+    assert.match(state.history.at(-1).reason, /bypass gate: architecture/);
+
+    // 3) event riêng, không lẫn với DesignApproved
+    const events = store.bus.read(id);
+    assert.ok(
+      events.some((event) => event.type === "HumanGateBypassed" && event.toStatus === "PLANNING"),
+      `thiếu event HumanGateBypassed: ${events.map((event) => event.type).join(",")}`,
+    );
+
+    // 4) metrics từng báo bypassed=false dù đã bypass — nay phải đúng + kèm lý do
+    const metrics = collectMetrics(id);
+    const gate = metrics.process.humanGates.find((episode) => episode.gateId === "architecture");
+    assert.ok(gate, "phải có episode cho gate architecture");
+    assert.equal(gate.bypassed, true);
+    assert.match(gate.bypassReason, /risk LOW/);
+  });
+
+  it("risk LOW mà KHÔNG có cờ --allow-bypass thì vẫn bị chặn (bypassRequiresConfigFlag)", () => {
+    const id = "RT-9006";
+    store.create({ taskId: id, title: "low no flag", risk: "LOW" });
+    for (const to of ["TRANSLATING", "REQUIREMENT_ANALYSIS", "IMPACT_ANALYSIS", "DESIGNING", "WAITING_DESIGN_APPROVAL"]) {
+      store.transition(id, to);
+    }
+    assert.throws(
+      () => store.transition(id, "PLANNING"),
+      (error) => error.code === "HUMAN_APPROVAL_REQUIRED",
+    );
+  });
+
   it("block cần lý do; resume chỉ ra việc phải xử lý", () => {
     store.create({ taskId: B, title: "blocked task" });
     assert.throws(
@@ -264,6 +308,17 @@ describe("runtime — acceptance criteria (qua CLI, process riêng)", () => {
     const onDisk = JSON.parse(readFileSync(path.join(workstreamDir(A), "task.json"), "utf8"));
     assert.equal(validateWith("task", onDisk).valid, true);
     assert.equal(onDisk.history.length, 2);
+  });
+
+  it("cờ lạ bị TỪ CHỐI (không bỏ qua âm thầm) và có gợi ý cờ gần đúng", async () => {
+    const typo = await runCli(["status", A, "--flag-la"]);
+    assert.equal(typo.code, 1);
+    assert.match(typo.stderr, /UNKNOWN_FLAG/);
+    assert.match(typo.stderr, /--flag-la/);
+
+    const nearMiss = await runCli(["advance", A, "--to", "TRANSLATING", "--allow-bypas"]);
+    assert.equal(nearMiss.code, 1);
+    assert.match(nearMiss.stderr, /ý bạn là --allow-bypass/);
   });
 
   it("F. evidence persist, có provenance, đúng schema", async () => {

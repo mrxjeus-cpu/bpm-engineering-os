@@ -1,8 +1,9 @@
 import { nextStatuses } from "../state/machine.js";
 import type { GateCheck } from "../state/gates.js";
+import { bypassDecision, effectiveRequired } from "../state/gates.js";
 import { humanGatesForTransition } from "../config/index.js";
 import { StateStore } from "../state/store.js";
-import type { TaskStatus } from "../types.js";
+import type { ExecutionMode, RiskLevel, TaskStatus } from "../types.js";
 import { PhaseOrchestrator, type RunPhaseOptions } from "./phases.js";
 import { PHASES, type PhaseName, type PhaseResult } from "./types.js";
 
@@ -86,10 +87,15 @@ interface BlockingGate {
 }
 
 /** Human gate BẮT BUỘC chưa approve cho transition hợp lệ kế tiếp (INV-05). */
-function blockingHumanGate(store: StateStore, taskId: string, status: TaskStatus): BlockingGate | null {
+function blockingHumanGate(
+  store: StateStore,
+  taskId: string,
+  status: TaskStatus,
+  options: { allowBypass?: boolean } = {},
+): BlockingGate | null {
   for (const to of nextStatuses(status)) {
     const checks = store
-      .gatesFor(taskId, to)
+      .gatesFor(taskId, to, options)
       .filter((check) => check.required && !check.satisfied && !check.bypassed);
     if (checks.length > 0) return { to, checks };
   }
@@ -98,12 +104,18 @@ function blockingHumanGate(store: StateStore, taskId: string, status: TaskStatus
 
 /**
  * Gate cho `--dry-run`: state thật KHÔNG đổi trong lúc chiếu, nên phải đọc từ config
- * (`config/gates.yaml`) theo transition đang chiếu, không hỏi state store.
+ * (`config/gates.yaml`) theo transition đang chiếu + mode/risk hiện tại, không hỏi state store.
  */
-function projectedGate(status: TaskStatus): { to: TaskStatus; gateIds: string[] } | null {
+function projectedGate(
+  status: TaskStatus,
+  options: { mode: ExecutionMode; risk: RiskLevel; allowBypass: boolean },
+): { to: TaskStatus; gateIds: string[] } | null {
   for (const to of nextStatuses(status)) {
-    const required = humanGatesForTransition(status, to).filter((gate) => gate.required);
-    if (required.length > 0) return { to, gateIds: required.map((gate) => gate.id) };
+    const blocking = humanGatesForTransition(status, to).filter((gate) => {
+      if (!effectiveRequired(gate, { riskFactors: [] })) return false;
+      return !bypassDecision(gate, options).bypassed;
+    });
+    if (blocking.length > 0) return { to, gateIds: blocking.map((gate) => gate.id) };
   }
   return null;
 }
@@ -142,7 +154,8 @@ export async function continueTicket(taskId: string, options: ContinueRunOptions
     dryRun: options.dryRun === true,
   };
 
-  const currentGate = (status: TaskStatus): BlockingGate | null => blockingHumanGate(store, taskId, status);
+  const bypassOptions = options.allowBypass === true ? { allowBypass: true } : {};
+  const currentGate = (status: TaskStatus): BlockingGate | null => blockingHumanGate(store, taskId, status, bypassOptions);
 
   // ---------------------------------------------------------------- dry run
   if (options.dryRun === true) {
@@ -150,7 +163,11 @@ export async function continueTicket(taskId: string, options: ContinueRunOptions
     let stoppedBecause: ContinueStop = "MAX_STEPS";
     let stoppedDetail = `chiếu ${maxSteps} pha`;
     for (let i = 0; i < maxSteps; i += 1) {
-      const gate = projectedGate(cursor);
+      const gate = projectedGate(cursor, {
+        mode: start.mode,
+        risk: start.risk,
+        allowBypass: options.allowBypass === true,
+      });
       if (gate) {
         stoppedBecause = "HUMAN_GATE";
         stoppedDetail = `sẽ dừng ở human gate: ${gate.gateIds.join(", ")} (${cursor} → ${gate.to})`;

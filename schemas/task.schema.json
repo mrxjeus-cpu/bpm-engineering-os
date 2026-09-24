@@ -82,6 +82,12 @@
       "description": "gateId -> đã approve hay chưa (evidence HUMAN_APPROVAL tương ứng)",
       "additionalProperties": { "type": "boolean" }
     },
+    "gateBypasses": {
+      "type": "object",
+      "description": "Vết audit: gate bị BỎ QUA (không phải người duyệt) → lý do. Phân biệt với approvals[gate]=true nghĩa là đã duyệt (INV-05/INV-12).",
+      "additionalProperties": { "type": "string" },
+      "examples": [{ "architecture": "risk LOW ≤ LOW + cờ allow-bypass" }]
+    },
     "evidence": {
       "type": "array",
       "description": "Đường dẫn tương đối trong workstream",

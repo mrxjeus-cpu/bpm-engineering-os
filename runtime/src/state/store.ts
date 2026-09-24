@@ -41,6 +41,7 @@ const READONLY_FIELDS = new Set([
   "phase",
   "history",
   "evidence",
+  "gateBypasses",
   "createdAt",
   "updatedAt",
 ]);
@@ -371,12 +372,27 @@ export class StateStore {
       if (check.satisfied || check.bypassed) approvals[check.gateId] = true;
     }
 
+    /**
+     * Vết audit (INV-05/INV-12): gate BỊ BỎ QUA phải phân biệt được với gate đã được NGƯỜI duyệt.
+     * `approvals[gate]=true` một mình là không đủ vì nó đúng cho cả hai trường hợp.
+     */
+    const bypasses = gateChecks.filter((check) => check.bypassed && !check.satisfied);
+    const gateBypasses = { ...(current.gateBypasses ?? {}) };
+    for (const check of bypasses) gateBypasses[check.gateId] = check.bypassReason ?? "bỏ qua theo config";
+
     const timestamp = nowIso();
+    const reasonParts = [
+      ...(options.reason !== undefined && options.reason.trim() !== "" ? [options.reason] : []),
+      ...(bypasses.length > 0
+        ? [`bypass gate: ${bypasses.map((check) => `${check.gateId} (${check.bypassReason ?? "theo config"})`).join("; ")}`]
+        : []),
+    ];
     const next: TaskState = {
       ...current,
       status: to,
       phase: phaseForStatus(to),
       approvals,
+      ...(bypasses.length > 0 ? { gateBypasses } : {}),
       updatedAt: timestamp,
       history: [
         ...(current.history ?? []),
@@ -385,7 +401,7 @@ export class StateStore {
           from: current.status,
           to,
           by: options.by ?? "runtime:eng",
-          ...(options.reason ? { reason: options.reason } : {}),
+          ...(reasonParts.length > 0 ? { reason: reasonParts.join(" — ") } : {}),
           ...(options.evidenceRef ? { evidenceRef: options.evidenceRef } : {}),
         },
       ],
@@ -409,6 +425,17 @@ export class StateStore {
         toStatus: to,
         evidenceRef: options.evidenceRef ?? null,
         payload: { [eventType === "HumanApprovalRequired" ? "gate" : "reason"]: options.reason ?? null },
+      });
+    }
+    // Sự kiện RIÊNG cho bypass: không để lẫn với "đã được người duyệt".
+    if (bypasses.length > 0) {
+      this.bus.emit({
+        taskId,
+        type: "HumanGateBypassed",
+        actor: options.by ?? "runtime:eng",
+        fromStatus: current.status,
+        toStatus: to,
+        payload: { gates: bypasses.map((check) => ({ gateId: check.gateId, reason: check.bypassReason ?? null })) },
       });
     }
     return next;
@@ -501,9 +528,9 @@ export class StateStore {
   }
 
   /** Kiểm tra human gate cho một transition mà không thực hiện (dùng cho CLI/agent hỏi trước). */
-  gatesFor(taskId: string, to: TaskStatus): GateCheck[] {
+  gatesFor(taskId: string, to: TaskStatus, options: { allowBypass?: boolean } = {}): GateCheck[] {
     const state = this.require(taskId);
-    return checkHumanGates(state, to, this.evidence.list(taskId));
+    return checkHumanGates(state, to, this.evidence.list(taskId), options);
   }
 
   #write(state: TaskState): void {

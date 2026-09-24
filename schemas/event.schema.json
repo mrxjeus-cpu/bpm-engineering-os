@@ -25,6 +25,7 @@
         "AuditFailed",
         "AuditPassed",
         "HumanApprovalRequired",
+        "HumanGateBypassed",
         "Blocked",
         "Completed"
       ]

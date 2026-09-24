@@ -66,6 +66,11 @@ export interface TaskState {
   domains?: string[];
   capabilities?: string[];
   approvals?: Record<string, boolean>;
+  /**
+   * Vết audit cho human gate bị BỎ QUA (không phải người duyệt): gateId → lý do.
+   * Không suy ra được từ `approvals` (approvals chỉ có true/false) — xem INV-05/INV-12.
+   */
+  gateBypasses?: Record<string, string>;
   evidence?: string[];
   artifacts?: Record<string, string | null>;
   git?: { branch?: string; baseRef?: string; baseSha?: string; headSha?: string };
@@ -198,6 +203,7 @@ export type EventType =
   | "AuditFailed"
   | "AuditPassed"
   | "HumanApprovalRequired"
+  | "HumanGateBypassed"
   | "Blocked"
   | "Completed";
 
