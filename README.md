@@ -22,15 +22,16 @@ Spec đầy đủ: [`SPEC-bpm-engineering-os.md`](./SPEC-bpm-engineering-os.md)
 | `runtime/` AgentRunner + prompt contract + ModelRouter | ✅ prompt contract 9 phần, harness cấu hình được (INV-07), kiểm tra artifact thật, `eng wave --run` |
 | `runtime/` Skill router | ✅ chọn skill theo role/phase/trigger, `required` không bị cắt, nhúng vào prompt theo budget |
 | `runtime/` RecoveryEngine | ✅ phân loại 8 loại lỗi bằng rule tất định, recovery context tối thiểu, loop guard |
-| `runtime/` Phase commands | ✅ `eng translate\|analyze\|design\|plan\|implement\|review\|audit\|verify` — mỗi lệnh gói chuỗi bước của một pha, có `--dry-run` |
+| `runtime/` Phase commands | ✅ `eng translate\|analyze\|design\|plan\|implement\|review\|audit\|verify` — mỗi lệnh gói chuỗi bước của một pha, có `--dry-run`; `eng continue` chạy liên tiếp tới khi phải chờ người (exit 0 chỉ khi `DONE`) |
 | `runtime/` Song song + khoá | ✅ `eng implement --parallel` chạy wave song song trong git worktree cô lập; lock workstream chống ghi chồng; `eng merge` merge thủ công có kiểm soát |
+| `runtime/` **Multi-repo** | ✅ một ticket sửa nhiều repo ở các thư mục cha khác nhau (spec 9.5): `task.projects[]` + `### Repo` theo task; context/evidence/conflict/worktree tính theo **từng repo**; gate đòi `BUILD`/`TEST`/`SCOPE_VALIDATION` cho mọi repo |
 | `mcp/mcp-engineering` | ✅ thin server chạy được (stdio), 31 tool chia 6 group; symbol index pattern-based có cache (TTL/gitSha), tra cứu xếp hạng `exact`/`likely`/`weak` |
 | `runtime/` Metrics | ✅ `eng metrics <TASK_ID>` — thời gian theo status, context token (ước lượng), evidence gate tái dựng tại thời điểm transition, human gate wait, block episode; metric không đo được thì khai báo rõ chứ không ước lượng thay |
 | `runtime/` Doctor (preflight) | ✅ `eng doctor [--project P] [--ping]` — kiểm env, cấu hình, gate↔state machine, model routing, harness/binary, MCP build+routing, skill catalog, repo đích (git/branch/scope/worktree); `--ping` khởi động thật 2 MCP server |
 | `runtime/` Cost theo tier | ✅ event `AgentRun` ghi model tier + thời gian + token (nếu harness báo `ENG_USAGE_FILE`); không có nguồn thì `eng metrics` nói rõ chứ không ước lượng |
 | `mcp/mcp-domain-core` | ✅ thin server chạy được (stdio), 17 tool + sample dataset synthetic |
 | `skills/` (17 skill) · `agents/` (6) · `workflows/` (12) · `templates/` (8) | ✅ đã viết; skill do router chọn, agent/workflow/template là instruction thật |
-| `tests/` | ✅ 220 test: 20 runtime/state + 23 plan/graph + 13 context + 20 agent + 19 skill + 21 recovery + 16 phase + 13 song song/khoá + 22 MCP + 9 path contract + 9 symbol index + 20 metrics + 14 doctor |
+| `tests/` | ✅ 250 test: 20 runtime/state + 23 plan/graph + 13 context + 21 agent + 19 skill + 21 recovery + 16 phase + 13 song song/khoá + 22 MCP + 9 path contract + 9 symbol index + 20 metrics + 14 doctor + 22 multi-repo + 8 continue |
 
 **Còn heuristic:** symbol index hiện là **pattern-based** (regex khai báo + package/import), *không* phải type resolution — đủ để thu hẹp phạm vi đọc file và xếp hạng caller, **không** đủ để khẳng định "không còn caller nào khác". Điểm thay thế đã tách sẵn (`extractSymbols`/`rankUsage`) để đổi sang LSP/JavaParser/SCIP. Chưa đo baseline token/thời gian trên ticket thật.
 
@@ -49,13 +50,15 @@ Chạy thử:
 ```bash
 npm run eng -- config                      # kiểm tra 5 file config
 npm run eng -- new TASK-49043 --risk HIGH
-npm run eng -- resume TASK-49043          # việc tiếp theo, gate đang mở, artifact còn thiếu
-npm run eng -- metrics TASK-49043         # đo baseline: thời gian, context, gate, block, cost theo tier (spec mục 21)
+npm run eng -- continue TASK-49043         # chạy liên tiếp tới khi phải chờ người (exit 0 chỉ khi DONE)
+npm run eng -- resume TASK-49043           # việc tiếp theo, gate đang mở, artifact còn thiếu
+npm run eng -- metrics TASK-49043          # đo baseline: thời gian, context, gate, block, cost theo tier (spec mục 21)
 npm run eng -- doctor                      # preflight trước khi chạy ticket thật (xem RUNBOOK.md)
 npm run mcp:engineering                    # stdio — chờ JSON-RPC trên stdin
 npm run mcp:domain
 ```
 
+Mới bắt đầu? Xem [`GETTING-STARTED.md`](./GETTING-STARTED.md) (cài đặt → `eng doctor` → smoke test không cần LLM).
 Chi tiết CLI + API runtime: xem [`runtime/README.md`](./runtime/README.md). Chạy ticket thật: xem [`RUNBOOK.md`](./RUNBOOK.md).
 
 ### Đăng ký với coding agent
@@ -97,6 +100,7 @@ Chi tiết CLI + API runtime: xem [`runtime/README.md`](./runtime/README.md). Ch
 ├── mcp/
 │   ├── mcp-engineering/            # repo/code/git/architecture/verification/task intelligence
 │   └── mcp-domain-core/              # domain DOMAIN: product/policy/fact/core/reference
+├── GETTING-STARTED.md              # điểm bắt đầu: cài đặt → doctor → smoke test không cần LLM
 ├── RUNBOOK.md                      # quy trình chạy 1 ticket thật trên máy nội bộ
 └── tests/                          # smoke test + fixtures
 ```

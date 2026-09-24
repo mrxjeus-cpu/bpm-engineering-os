@@ -522,11 +522,16 @@ Hệ quả thiết kế: **reviewer không được giả định là người c
 > review · audit · verify`) có `--dry-run`, tự thu evidence cơ học (build/test/scope qua MCP) và tự
 > gọi RecoveryEngine khi worker lỗi. Lệnh dữ liệu (`plan import|show`, `graph`, `wave`, `subtask`,
 > `context`, `agent`, `skills`, `recover`) đứng riêng.
+>
+> **Đã implement — `eng continue`**: chạy LIÊN TIẾP các phase suy ra từ `task.json.status` cho tới khi
+> gặp việc phải do người quyết (`DONE` · human gate · evidence gate · phải merge · lỗi). Exit code 0
+> chỉ khi ticket tới `DONE`; mỗi điểm dừng in ra đúng lệnh cần gõ tiếp. Không nới gate nào (INV-03/INV-05).
 
 ```text
 /eng new TASK-49043
 /eng status TASK-49043
-/eng translate  TASK-49043
+/eng continue   TASK-49043          # chạy tới khi phải chờ người — đường mặc định cho việc hằng ngày
+/eng translate  TASK-49043          # (từng phase, khi cần chạy riêng)
 /eng analyze    TASK-49043          # requirements + impact
 /eng design     TASK-49043
 /eng plan       TASK-49043
@@ -561,7 +566,8 @@ Step 14 DONE            → emit Completed, cập nhật tracker
 ```markdown
 ## TASK-03 — Update Policy Input
 ### Objective
-### Files        (chính xác đường dẫn, file sửa/tạo)
+### Repo         (tên project trong config/projects.yaml — BẮT BUỘC khi ticket chạm nhiều repo)
+### Files        (chính xác đường dẫn, file sửa/tạo — tương đối so với repoRoot của Repo)
 ### Symbols
 ### Dependencies  (none | TASK-01, TASK-02)
 ### Existing Pattern (bắt buộc nếu có)
@@ -590,6 +596,42 @@ T1 → PolicyService.java   T2 → CustomerMapper.java     ⇒ parallel nếu DA
 ```
 
 Khuyến nghị: **không parallel quá sớm** trên codebase ngân hàng — `parallelism ≠ always faster`.
+
+### 9.5 Multi-repo — một feature sửa nhiều repo
+
+Bối cảnh: một feature BPM thường phải sửa **nhiều repo** cùng lúc (service + consumer/SDK + cấu hình),
+và các repo đó có thể nằm ở **các thư mục cha khác nhau**. Mô hình là **1 ticket = 1 feature = n repo**;
+không nhồi nhiều repo vào một task, cũng không cần gộp repo về cùng thư mục.
+
+| Khai ở đâu | Ý nghĩa |
+|---|---|
+| `config/projects.yaml → projects.<name>` | một repo; `repoRoot` lấy từ env (đường dẫn tuyệt đối) ⇒ vị trí thư mục không quan trọng |
+| `task.json → projects[]` | repo của ticket; phần tử **đầu** là repo chính |
+| `plan.md → ### Repo` / `plan.json → tasks[].repo` | repo của **từng task**; không khai ⇒ repo chính |
+| `evidence.project` | evidence thuộc repo nào |
+
+Luật bắt buộc:
+
+1. Tên repo phải là project có thật trong `config/projects.yaml`. Tên lạ ⇒ lỗi rõ ràng, **không** suy ra đường dẫn (INV-06).
+2. Mỗi task chỉ sửa **một** repo (khai nhiều ⇒ lỗi `MULTIPLE_REPO`).
+3. `Files`/`Symbols` là đường dẫn **tương đối** so với repoRoot của repo task đó; context compiler chỉ tra trong repo đó.
+4. Conflict check (INV-11) so theo cặp **(repo, file)** và **(repo, symbol)**: cùng file ở hai repo khác nhau **không** phải conflict; migration chỉ cạnh tranh thứ tự trong cùng repo.
+5. Gate evidence: `BUILD`, `TEST`, `SCOPE_VALIDATION` là evidence **cấp repo** ⇒ ticket có ≥ 2 repo phải có đủ cho **từng** repo (`evidence.project` bắt buộc). `SPEC_REVIEW`, `QUALITY_REVIEW`, `AUDIT`, `HUMAN_APPROVAL` là **cấp ticket** (một người review cả feature).
+6. `eng implement --parallel`: mỗi task tạo worktree trong repo của nó; `eng merge` merge theo repo ghi trong `tasks/<TASK-NN>-changes.json`.
+7. Thứ tự phụ thuộc **xuyên repo** dùng chính `### Dependencies` — ví dụ task ở repo B phụ thuộc task ở repo A để chốt contract trước.
+8. Ticket không khai repo nào ⇒ giữ nguyên hành vi cũ: repo lấy từ `--project` hoặc `defaultProject`.
+
+```bash
+eng new PAY-101 --title "Đổi contract thanh toán" --risk HIGH \
+  --project payment-api --project payment-client
+eng plan import PAY-101 --file plan.md          # mỗi task khai ### Repo
+eng implement PAY-101 --project payment-api     # (tuỳ chọn) giới hạn 1 repo
+eng verify PAY-101                              # verify MỌI repo của ticket
+eng metrics PAY-101 --write                     # có breakdown evidence theo repo
+```
+
+Giới hạn đã biết: `eng merge` **không** tự merge xuyên repo (thứ tự merge do người quyết: repo contract trước,
+consumer sau); contract giữa các repo phải được chốt ở `architecture.md` của ticket — runtime không tự suy diễn.
 
 ---
 
@@ -952,6 +994,7 @@ Ngôn ngữ implementation có thể khác; **boundary** phải giữ nguyên.
 ✓ 1 state machine (task.json) + human gate
 ✓ 2 MCP (bản mỏng, đủ dùng)
 ✓ chạy 1 ticket thật end-to-end
+✓ multi-repo: 1 ticket sửa nhiều repo ở các thư mục cha khác nhau (mục 9.5)
 ```
 
 ### Phase 2 — Engineering workflow đầy đủ

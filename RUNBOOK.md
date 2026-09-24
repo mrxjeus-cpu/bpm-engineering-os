@@ -81,6 +81,10 @@ Nếu harness không ghi `ENG_USAGE_FILE`, cost vẫn đo được theo **tier +
 
 ## 4. Chạy ticket
 
+> **Ngắn nhất**: `node runtime/dist/cli.js continue $T --harness internal-cli --project $P` chạy liên tiếp
+> các pha cho tới khi phải chờ người (human gate / evidence gate / merge / lỗi) rồi in đúng lệnh cần gõ tiếp.
+> Exit 0 chỉ khi ticket `DONE`. Các lệnh từng pha dưới đây dùng khi cần chạy riêng một pha.
+
 ```powershell
 $T = "TASK-49043"
 $P = "individual-service"
@@ -126,6 +130,33 @@ node runtime/dist/cli.js audit  $T --harness internal-cli --project $P
 node runtime/dist/cli.js verify $T --project $P      # thu evidence BUILD/TEST/SCOPE_VALIDATION thật
 node runtime/dist/cli.js status $T                   # DONE + evidence đầy đủ
 ```
+
+### 4.4 Ticket sửa NHIỀU repo (spec mục 9.5)
+
+Feature thật thường phải sửa nhiều repo — có thể nằm ở **các thư mục cha khác nhau**. Không cần symlink,
+không cần gộp repo: khai mỗi repo là một project trong `config/projects.yaml` (`repoRoot` lấy từ env).
+
+```powershell
+$P1 = "payment-api"; $P2 = "payment-client"
+node runtime/dist/cli.js new $T --title "..." --risk HIGH --project $P1 --project $P2
+# plan.md: mỗi task khai "### Repo: payment-api" (hoặc payment-client); Files tương đối so với repoRoot của repo đó
+node runtime/dist/cli.js plan import $T --file plan.md
+node runtime/dist/cli.js graph    $T                 # hiển thị [repo] từng task + wave
+node runtime/dist/cli.js context  $T --all           # mỗi task lấy context từ REPO CỦA NÓ
+node runtime/dist/cli.js implement $T --harness internal-cli            # tuần tự
+node runtime/dist/cli.js implement $T --parallel --concurrency 2 --harness internal-cli   # worktree theo từng repo
+node runtime/dist/cli.js merge    $T                 # merge theo repo ghi trong tasks/TASK-NN-changes.json
+node runtime/dist/cli.js verify   $T                 # build+test+scope cho MỌI repo của ticket
+node runtime/dist/cli.js metrics  $T --write         # có breakdown evidence theo repo
+```
+
+Bắt buộc nhớ:
+
+- `BUILD`/`TEST`/`SCOPE_VALIDATION` phải có cho **từng** repo ⇒ khi `record` tay phải thêm `--project <repo>`;
+  `SPEC_REVIEW`/`QUALITY_REVIEW`/`AUDIT`/`HUMAN_APPROVAL` là cấp ticket.
+- Thứ tự phụ thuộc **xuyên repo** ghi ở `### Dependencies` (task repo B phụ thuộc task repo A ⇒ B vào wave sau).
+- Conflict check tính theo cặp (repo, file) ⇒ cùng file ở hai repo **không** chặn parallel.
+- Thứ tự merge do người quyết (repo contract trước, consumer sau); contract chốt ở `architecture.md`.
 
 ## 5. Đo baseline (spec mục 21)
 

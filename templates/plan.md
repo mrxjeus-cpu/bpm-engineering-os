@@ -2,14 +2,20 @@
 
 > Runtime parse file này. Mỗi task BẮT BUỘC có đủ các heading bên dưới,
 > nếu thiếu thì `eng plan import` sẽ từ chối (xem skill `writing-plan`).
+>
+> Ticket sửa **nhiều repo** (spec 9.5): thêm `### Repo` cho từng task — tên project trong
+> `config/projects.yaml`. Mỗi task chỉ MỘT repo; `### Files` là tương đối so với repoRoot của repo đó.
 
 ## TASK-01 — <tiêu đề ngắn, hành động rõ>
 
 ### Objective
 <một đoạn: task này đạt gì>
 
+### Repo
+<project trong config/projects.yaml — bỏ mục này nếu ticket chỉ có 1 repo>
+
 ### Files
-- <đường dẫn chính xác file sửa/tạo>
+- <đường dẫn chính xác file sửa/tạo, tương đối so với repoRoot của Repo>
 
 ### Symbols
 - <Class.method sẽ chạm>

@@ -109,6 +109,7 @@ Trạng thái: ✅ đã implement · ⬜ chưa (theo thứ tự spec mục 18.1)
 | ADR-09 | Symbol index **pattern-based** (regex khai báo + package/import) cache theo `gitSha`+TTL, thay vì kéo LSP/JavaParser/SCIP vào Phase 1 | Không thêm toolchain/build cho repo đích; kết quả là *xếp hạng* (`exact`/`likely`/`weak`) chứ không phải type resolution; biên `extractSymbols`/`rankUsage` là điểm thay thế khi cần chính xác |
 | ADR-10 | Metrics tính lại từ workstream, không lưu bản sao số liệu; metric không có nguồn phải khai báo là không đo được | Không có dashboard lệch với state; nhưng mọi state change phải ghi `history[]` (kể cả block/unblock) nếu không sẽ mất dấu vết audit |
 | ADR-11 | Worker báo token qua `ENG_USAGE_FILE` (tùy chọn); runtime không tự đo token provider | Cost metric có provenance, nhưng phải nói rõ phần nào chưa đo được; harness không báo thì không có token, không ước lượng |
+| ADR-12 | Multi-repo: **1 ticket = 1 feature = n repo**, repo khai ở `task.projects[]` + `plan.tasks[].repo` (spec 9.5) | Ticket đơn vị công việc thật, không phải repo; `repoRoot` lấy từ env nên repo ở thư mục cha nào cũng được. Đổi lại: `BUILD/TEST/SCOPE_VALIDATION` phải có cho **từng** repo (review/audit/approval vẫn cấp ticket), conflict check phải so theo cặp (repo, file) — nếu không sẽ chặn parallel oan — và `eng merge` vẫn là thao tác thủ công theo từng repo |
 
 ---
 
