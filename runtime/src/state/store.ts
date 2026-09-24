@@ -6,6 +6,7 @@ import { EngError } from "../errors.js";
 import { EvidenceStore } from "../evidence/store.js";
 import { evaluateEvidenceGate } from "../evidence/rules.js";
 import { readPlan } from "../plan/store.js";
+import { reposForState } from "../repos.js";
 import { assertValid } from "../schemas/index.js";
 import type { EventType, Evidence, ExecutionMode, HistoryEntry, RiskLevel, TaskState, TaskStatus } from "../types.js";
 import { assertTransition, phaseForStatus, nextStatuses } from "./machine.js";
@@ -25,6 +26,7 @@ const PATCHABLE_FIELDS = new Set([
   "completedTasks",
   "blocked",
   "blockReason",
+  "projects",
   "domains",
   "capabilities",
   "approvals",
@@ -99,6 +101,8 @@ export interface CreateTaskInput {
   status?: TaskStatus;
   risk?: RiskLevel;
   mode?: ExecutionMode;
+  /** Repo đích của ticket (multi-repo — spec 9.4). Phần tử đầu là repo chính. */
+  projects?: string[];
   domains?: string[];
   capabilities?: string[];
   git?: TaskState["git"];
@@ -132,6 +136,8 @@ export interface ResumeReport {
   mode: ExecutionMode;
   blocked: boolean;
   blockReason?: string | null;
+  /** Repo của ticket (multi-repo — spec 9.4); repo chính đứng đầu. */
+  projects: string[];
   lastTransition?: HistoryEntry;
   tasks: { current: string[]; completed: string[]; wave?: number };
   contexts: Array<{ subTaskId: string; status: string; compiled: boolean }>;
@@ -235,6 +241,7 @@ export class StateStore {
       completedTasks: [],
       blocked: false,
       blockReason: null,
+      projects: input.projects ?? [],
       domains: input.domains ?? [],
       capabilities: input.capabilities ?? [],
       approvals: {},
@@ -341,7 +348,9 @@ export class StateStore {
     assertTransition(current.status, to);
 
     const evidence = this.evidence.list(taskId);
-    const gateResult = evaluateEvidenceGate(to, evidence, { risk: current.risk });
+    // Multi-repo (spec 9.4): gate phải kiểm evidence cho TỪNG repo của ticket.
+    const projects = reposForState(current, readPlan(taskId, this.#root));
+    const gateResult = evaluateEvidenceGate(to, evidence, { risk: current.risk, projects });
     if (!gateResult.ok) {
       throw new EngError(
         "EVIDENCE_REQUIRED",
@@ -472,6 +481,7 @@ export class StateStore {
       mode: state.mode,
       blocked: state.blocked,
       blockReason: state.blockReason ?? null,
+      projects: reposForState(state, plan),
       tasks: {
         current: state.currentTasks ?? [],
         completed: state.completedTasks ?? [],

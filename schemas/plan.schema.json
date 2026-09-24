@@ -33,6 +33,11 @@
             "items": { "type": "string" },
             "examples": [["PolicyService.buildInput", "PolicyInputMapper.map"]]
           },
+          "repo": {
+            "type": "string",
+            "description": "Project trong config/projects.yaml mà task này sửa (spec mục 9.4). Không khai ⇒ repo chính của ticket. Bắt buộc khi ticket chạm nhiều repo.",
+            "examples": ["individual-service", "policy-new"]
+          },
           "existingPattern": {
             "type": ["string", "null"],
             "description": "Pattern có sẵn phải tái sử dụng (skill existing-code-first). Null phải kèm lý do ở 'deviation'."

@@ -29,6 +29,11 @@
     "status": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "INFO"] },
     "summary": { "type": "string", "maxLength": 500 },
 
+    "project": {
+      "type": "string",
+      "description": "Project (repo) mà evidence thuộc về (spec mục 9.4). Ticket chạm nhiều repo: gate DONE đòi BUILD/TEST/SCOPE_VALIDATION cho TỪNG repo, nên evidence phải nêu rõ repo."
+    },
+
     "command": {
       "type": "string",
       "description": "Lệnh đã chạy (không phải lệnh dự kiến chạy)"

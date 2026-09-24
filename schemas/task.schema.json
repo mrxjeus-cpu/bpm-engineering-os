@@ -70,6 +70,12 @@
       "items": { "type": "string" },
       "examples": [["domain", "loan"]]
     },
+    "projects": {
+      "type": "array",
+      "description": "Repo đích của ticket (multi-repo, spec mục 9.4). Phần tử đầu là repo CHÍNH — task không khai '### Repo' dùng repo chính. Không có ⇒ defaultProject trong config/projects.yaml.",
+      "items": { "type": "string", "minLength": 1 },
+      "examples": [["individual-service", "policy-new"]]
+    },
     "capabilities": { "type": "array", "items": { "type": "string" } },
     "approvals": {
       "type": "object",

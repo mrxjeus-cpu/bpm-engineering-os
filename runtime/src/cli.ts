@@ -18,6 +18,7 @@ import { createProviders } from "./context/providers.js";
 import { AGENTS, AGENT_ROLES } from "./agents/registry.js";
 import { AgentRunner, type AgentRunResult } from "./agents/runner.js";
 import { harnessNames, resolveRepoRoot, skillRoutingLimits } from "./config/index.js";
+import { isKnownProject, primaryProject, projectNames, reposForState } from "./repos.js";
 import { WorktreeManager } from "./git/worktree.js";
 import { describeLock, forceReleaseLock, lockStatus } from "./state/lock.js";
 import { atomicWrite, readJsonFile, relPath } from "./workspace.js";
@@ -27,12 +28,13 @@ import { collectMetrics } from "./metrics/collect.js";
 import { renderMetrics } from "./metrics/compute.js";
 import { RecoveryEngine } from "./recovery/engine.js";
 import { PhaseOrchestrator } from "./orchestrator/phases.js";
+import { continueTicket } from "./orchestrator/continue.js";
 import { PHASE_NAMES, type PhaseName } from "./orchestrator/types.js";
 import { loadSkills } from "./skills/loader.js";
 import { routeSkills, skillCatalogSummary } from "./skills/router.js";
 import { OS_ROOT } from "./paths.js";
 import { parsePlanMarkdown } from "./plan/parser.js";
-import { planProgress, readPlan, requirePlan, setTaskStatus, writePlan } from "./plan/store.js";
+import { importPlanFromMarkdown, planProgress, readPlan, requirePlan, setTaskStatus, writePlan } from "./plan/store.js";
 import { assertTransition, nextStatuses, TRANSITIONS } from "./state/machine.js";
 import { StateStore, type ResumeReport } from "./state/store.js";
 import type {
@@ -50,7 +52,7 @@ import { ensureWorkstream, workstreamDir } from "./workspace.js";
 const USAGE = `eng — BPM Engineering OS CLI
 
   eng new <TASK_ID> [--title TEXT] [--risk LOW|MEDIUM|HIGH|CRITICAL] [--mode safe|normal|autonomous]
-                    [--domain a,b] [--capability a,b] [--status STATUS]
+                    [--project P]... [--projects a,b] [--domain a,b] [--capability a,b] [--status STATUS]
   eng list [--json]
   eng status <TASK_ID> [--json]
   eng resume <TASK_ID> [--json]
@@ -62,7 +64,7 @@ const USAGE = `eng — BPM Engineering OS CLI
   eng gates <TASK_ID> --to <STATUS>
   eng evidence <TASK_ID> [--type TYPE] [--json]
   eng record <TASK_ID> --type TYPE --status PASS|FAIL|BLOCKED|INFO [--summary TEXT]
-              [--command C] [--cwd D] [--exit-code N] [--git-sha S] [--artifact A]
+              [--project P] [--command C] [--cwd D] [--exit-code N] [--git-sha S] [--artifact A]
               [--gate-id G] [--approver U] [--approved-at ISO] [--unexpected a,b] [--deleted a,b]
               [--sub-task TASK-NN] [--producer WHO]
   eng events <TASK_ID> [--limit N] [--json]
@@ -98,7 +100,14 @@ Phase (spec mục 9.1 — gói sẵn chuỗi bước của một pha):
   eng translate|analyze|design|plan|implement|review|audit|verify <TASK_ID>
       [--harness NAME] [--project P] [--dry-run] [--no-recover] [--json]
 
-Ghi chú: đổi status bắt buộc qua "advance" (đi qua evidence gate INV-03 và human gate INV-05).`;
+Chạy liên tiếp (khuyến nghị cho việc hằng ngày):
+  eng continue <TASK_ID> [--harness NAME] [--project P] [--max-steps N] [--dry-run] [--no-recover]
+      # đọc state → chạy các pha kế tiếp cho tới khi: DONE | human gate | evidence gate | phải merge | lỗi
+
+Ghi chú: đổi status bắt buộc qua "advance" (đi qua evidence gate INV-03 và human gate INV-05).
+Multi-repo (spec mục 9.4): ticket khai nhiều repo bằng "--project a --project b"; mỗi task khai
+"### Repo" trong plan.md. Khi ticket có >= 2 repo, gate REVIEWING/DONE đòi evidence cho TỪNG repo
+(evidence phải có "project" — dùng --project khi record).`;
 
 interface ParsedArgs {
   command: string;
@@ -106,6 +115,8 @@ interface ParsedArgs {
   flags: Map<string, string | true>;
   repeated: Map<string, string[]>;
 }
+
+const REPEATABLE_FLAGS = new Set(["set", "project"]);
 
 function parseArgs(argv: string[]): ParsedArgs {
   const [command = "help", ...rest] = argv;
@@ -132,12 +143,12 @@ function parseArgs(argv: string[]): ParsedArgs {
     } else {
       flags.set(body, true);
     }
-    if (body === "set") {
-      const value = flags.get("set");
+    if (REPEATABLE_FLAGS.has(body)) {
+      const value = flags.get(body);
       if (typeof value === "string") {
-        const list = repeated.get("set") ?? [];
+        const list = repeated.get(body) ?? [];
         list.push(value);
-        repeated.set("set", list);
+        repeated.set(body, list);
       }
     }
   }
@@ -154,6 +165,32 @@ function flagList(args: ParsedArgs, name: string): string[] {
   const single = flag(args, name);
   if (single !== undefined && raw.length === 0) raw.push(single);
   return raw;
+}
+
+/**
+ * Repo của ticket từ CLI (multi-repo — spec 9.4):
+ * `--project a --project b` (lặp được) và/hoặc `--projects a,b`. Thứ tự = thứ tự khai.
+ */
+function projectList(args: ParsedArgs): string[] {
+  const out: string[] = [];
+  for (const name of [...flagList(args, "project"), ...flagList(args, "projects")]) {
+    for (const part of name.split(",")) {
+      const trimmed = part.trim();
+      if (trimmed !== "" && !out.includes(trimmed)) out.push(trimmed);
+    }
+  }
+  return out;
+}
+
+/** Fail fast khi khai repo không có trong config — không tự suy ra đường dẫn (INV-06). */
+function assertKnownProjects(names: string[]): void {
+  for (const name of names) {
+    if (!isKnownProject(name)) {
+      throw new EngError("INVALID_REPO", `Project "${name}" không có trong config/projects.yaml.`, {
+        hint: `Project có sẵn: ${projectNames().join(", ")} — repoRoot lấy từ env nên repo có thể nằm ở thư mục cha bất kỳ.`,
+      });
+    }
+  }
 }
 
 function required(args: ParsedArgs, name: string, context: string): string {
@@ -181,6 +218,9 @@ function formatReport(report: ResumeReport, detailed: boolean): string {
   const lines: string[] = [];
   lines.push(`${report.taskId}  ${report.status}  risk=${report.risk} mode=${report.mode} phase=${report.phase}`);
   if (report.title) lines.push(`  title      : ${report.title}`);
+  if (report.projects.length > 1) {
+    lines.push(`  repo       : ${report.projects.map((name, index) => `${name}${index === 0 ? " (chính)" : ""}`).join(", ")}`);
+  }
   lines.push(`  blocked    : ${report.blocked ? `CÓ — ${report.blockReason ?? ""}` : "không"}`);
   if (report.tasks.current.length > 0 || report.tasks.completed.length > 0) {
     lines.push(
@@ -237,14 +277,20 @@ function formatWaves(progress: WaveProgress[]): string {
 
 function formatPlan(plan: Plan, execution: ExecutionPlan): string {
   const lines: string[] = [];
+  const repos = [...new Set(plan.tasks.map((task) => task.repo ?? ""))].filter((name) => name !== "");
+  const multiRepo = repos.length > 1;
   lines.push(
     `plan ${plan.taskId} — ${plan.tasks.length} task · ${execution.waves.length} wave` +
       `${plan.source ? ` · nguồn ${plan.source}` : ""}${plan.architectureRef ? ` · architecture ${plan.architectureRef}` : ""}`,
   );
+  if (multiRepo) {
+    lines.push(`  repo: ${repos.join(", ")} (multi-repo — mỗi task chỉ sửa repo của nó)`);
+  }
   for (const task of plan.tasks) {
     const deps = task.dependencies.length === 0 ? "—" : task.dependencies.join(",");
+    const repo = multiRepo ? `[${task.repo ?? "?"}] ` : "";
     lines.push(
-      `  ${task.id}  ${(task.status ?? "PENDING").padEnd(15)} ${task.title.slice(0, 44).padEnd(46)}` +
+      `  ${task.id}  ${repo}${(task.status ?? "PENDING").padEnd(15)} ${task.title.slice(0, 40).padEnd(42)}` +
         ` deps=${deps.padEnd(14)} files=${task.files?.length ?? 0}${task.risk ? ` risk=${task.risk}` : ""}`,
     );
   }
@@ -259,6 +305,9 @@ function evidenceFromFlags(args: ParsedArgs): NewEvidence {
 
   const summary = flag(args, "summary");
   if (summary) evidence["summary"] = summary;
+  // Multi-repo (spec 9.4): evidence phải nêu repo nào thì gate DONE mới kiểm được từng repo.
+  const project = flag(args, "project");
+  if (project) evidence["project"] = project;
   const command = flag(args, "command");
   if (command) evidence["command"] = command;
   const cwd = flag(args, "cwd");
@@ -372,17 +421,24 @@ export async function runCli(argv: string[]): Promise<number> {
       const risk = flag(args, "risk") as RiskLevel | undefined;
       const mode = flag(args, "mode") as ExecutionMode | undefined;
       const status = flag(args, "status") as TaskStatus | undefined;
+      // Multi-repo (spec 9.4): ticket có thể khai nhiều repo; phần tử đầu là repo chính.
+      const projects = projectList(args);
+      assertKnownProjects(projects);
       const state = store.create({
         taskId,
         ...(flag(args, "title") ? { title: flag(args, "title") as string } : {}),
         ...(risk ? { risk } : {}),
         ...(mode ? { mode } : {}),
         ...(status ? { status } : {}),
+        ...(projects.length > 0 ? { projects } : {}),
         ...(domains ? { domains: domains.split(",") } : {}),
         ...(capabilities ? { capabilities: capabilities.split(",") } : {}),
       });
       print(state, args.flags.has("json"), () => {
         process.stdout.write(`Đã tạo workstream ${state.taskId} tại ${store.dir(state.taskId)}\n`);
+        if (projects.length > 0) {
+          process.stdout.write(`  repo       : ${projects.map((name, index) => `${name}${index === 0 ? " (chính)" : ""}`).join(", ")}\n`);
+        }
         process.stdout.write(formatReport(store.resume(state.taskId), false) + "\n");
       });
       return 0;
@@ -582,6 +638,46 @@ export async function runCli(argv: string[]): Promise<number> {
       return 0;
     }
 
+    case "continue": {
+      const taskId = taskIdArg(args, "continue");
+      const project = flag(args, "project");
+      const harness = flag(args, "harness");
+      const json = args.flags.has("json");
+      const maxStepsRaw = flag(args, "max-steps");
+      const maxSteps = maxStepsRaw === undefined ? undefined : Number.parseInt(maxStepsRaw, 10);
+      const result = await continueTicket(taskId, {
+        ...(project ? { project } : {}),
+        ...(harness ? { harness } : {}),
+        ...(maxSteps !== undefined && !Number.isNaN(maxSteps) ? { maxSteps } : {}),
+        ...(args.flags.has("dry-run") ? { dryRun: true } : {}),
+        ...(args.flags.has("no-recover") ? { noRecover: true } : {}),
+        ...(json ? {} : { onProgress: (message: string) => process.stdout.write(`  … ${message}\n`) }),
+      });
+
+      print(result, json, () => {
+        const mark = result.dryRun ? "○" : result.ok ? "✓" : result.stoppedBecause === "HUMAN_GATE" ? "⏸" : "⛔";
+        process.stdout.write(`${mark} continue ${taskId} — ${result.from} → ${result.to}${result.dryRun ? " (dry run)" : ""}\n`);
+        for (const step of result.steps) {
+          const stepMark = step.ok ? "✔" : step.blocked ? "⏸" : "✖";
+          process.stdout.write(
+            `  ${stepMark} ${step.phase.padEnd(10)} ${step.from} → ${step.to}${step.progressed ? "" : " (không đổi)"}\n`,
+          );
+        }
+        process.stdout.write(`  dừng vì : ${result.stoppedBecause} — ${result.stoppedDetail}\n`);
+        for (const gate of result.openGates) {
+          process.stdout.write(`  gate mở : ${gate.gateId} (${gate.transition}) — required=${gate.required}\n`);
+        }
+        for (const warning of result.warnings.slice(0, 8)) process.stdout.write(`  ⚠ ${warning}\n`);
+        if (result.nextActions.length > 0) {
+          process.stdout.write("  việc tiếp:\n");
+          result.nextActions.slice(0, 6).forEach((action, index) => process.stdout.write(`    ${index + 1}. ${action}\n`));
+        }
+      });
+
+      // exit 0 CHỈ khi ticket đã DONE — mọi điểm dừng khác đều là "chưa xong".
+      return result.ok ? 0 : 1;
+    }
+
     case "translate":
     case "analyze":
     case "design":
@@ -597,12 +693,6 @@ export async function runCli(argv: string[]): Promise<number> {
       const taskId = taskIdArg(args, "merge");
       const only = args.positional[1];
       const project = flag(args, "project");
-      const repoRoot = resolveRepoRoot(project);
-      if (repoRoot === null) {
-        throw new EngError("REPO_ROOT_NOT_CONFIGURED", "Chưa cấu hình repoRoot nên không merge được.", {
-          hint: "Set env repoRoot trong config/projects.yaml rồi chạy lại.",
-        });
-      }
       const plan = requirePlan(taskId);
       const order = plan.waves && plan.waves.length > 0 ? plan.waves.flatMap((wave) => wave.tasks) : plan.tasks.map((task) => task.id);
       const targets = only ? [only] : order;
@@ -616,6 +706,8 @@ export async function runCli(argv: string[]): Promise<number> {
           branch: string;
           worktree: string;
           baseRef: string;
+          project?: string;
+          repoRoot?: string;
           merged?: boolean;
           files?: string[];
         }>(path.join(workstreamDir(taskId), rel));
@@ -627,6 +719,17 @@ export async function runCli(argv: string[]): Promise<number> {
         if (changes.merged === true) {
           results.push({ subTaskId, status: "skipped", detail: `đã merge trước đó (${changes.branch})` });
           continue;
+        }
+
+        // Multi-repo (spec 9.4): merge trong REPO của chính task, không phải repo chính của ticket.
+        const repoRoot = changes.repoRoot ?? resolveRepoRoot(changes.project ?? project);
+        if (repoRoot === null) {
+          results.push({
+            subTaskId,
+            status: "failed",
+            detail: `chưa cấu hình repoRoot cho repo "${changes.project ?? project ?? "(mặc định)"}" — không merge được (INV-06)`,
+          });
+          break;
         }
 
         const info = {
@@ -727,34 +830,33 @@ export async function runCli(argv: string[]): Promise<number> {
         throw new EngError("PLAN_FILE_NOT_FOUND", `Không đọc được file plan: ${absolute}`);
       }
 
-      const parsed = parsePlanMarkdown(markdown);
-      if (parsed.errors.length > 0) {
-        throw new EngError("PLAN_PARSE_ERROR", `plan.md có ${parsed.errors.length} lỗi, chưa import.`, {
-          hint: "Sửa theo thông báo bên dưới rồi import lại. Mỗi task cần Objective, Acceptance Criteria (>=1) và Verification (>=1).",
-          details: { errors: parsed.errors },
-        });
+      ensureWorkstream(taskId);
+      const architectureRef = flag(args, "architecture-ref");
+      const existing = store.get(taskId);
+      const imported = importPlanFromMarkdown(taskId, markdown, {
+        ...(architectureRef ? { architectureRef } : {}),
+        source: path.basename(absolute),
+        ticketProjects: existing?.projects ?? [],
+      });
+
+      // Multi-repo (spec 9.4): repo trong plan trở thành repo của ticket (repo chính đứng đầu).
+      const merged = [...new Set([...(existing?.projects ?? []), ...imported.repos])];
+      if (existing && merged.length > 0) {
+        store.patch(taskId, { projects: merged }, { reason: `plan import: repo = ${merged.join(", ")}` });
       }
 
-      const architectureRef = flag(args, "architecture-ref");
-      const base: Plan = {
-        schemaVersion: 1,
-        taskId,
-        generatedAt: new Date().toISOString(),
-        source: path.basename(absolute),
-        tasks: parsed.tasks,
-        ...(architectureRef ? { architectureRef } : {}),
-      };
-
-      const { plan: withWaves, execution } = attachWaves(base);
-      ensureWorkstream(taskId);
-      writePlan(withWaves);
-      writeFileSync(path.join(workstreamDir(taskId), "plan.md"), markdown, "utf8");
-
-      print({ plan: withWaves, execution, warnings: parsed.warnings }, args.flags.has("json"), () => {
-        process.stdout.write(`✓ import ${parsed.tasks.length} task từ ${path.basename(absolute)} → ${path.join(workstreamDir(taskId), "plan.json")}\n`);
-        for (const warning of parsed.warnings) process.stdout.write(`  ⚠ ${warning}\n`);
-        process.stdout.write(`${formatPlan(withWaves, execution)}\n`);
-      });
+      const execution = buildExecutionPlan(imported.plan);
+      print(
+        { plan: imported.plan, execution, repos: imported.repos, warnings: imported.warnings },
+        args.flags.has("json"),
+        () => {
+          process.stdout.write(
+            `✓ import ${imported.taskCount} task từ ${path.basename(absolute)} → ${path.join(workstreamDir(taskId), "plan.json")}\n`,
+          );
+          for (const warning of imported.warnings) process.stdout.write(`  ⚠ ${warning}\n`);
+          process.stdout.write(`${formatPlan(imported.plan, execution)}\n`);
+        },
+      );
       return 0;
     }
 
@@ -976,6 +1078,7 @@ export async function runCli(argv: string[]): Promise<number> {
 
           results.push({
             subTaskId,
+            repo: compiled.context.repo ?? null,
             tokenEstimate: compiled.tokenEstimate,
             maxTokenBudget: compiled.context.budget?.maxTokenBudget,
             truncated: compiled.truncated,
@@ -998,7 +1101,8 @@ export async function runCli(argv: string[]): Promise<number> {
           process.stdout.write(
             `✓ context ${result.subTaskId}: ~${result.tokenEstimate} token` +
               `${result.truncated ? " (ĐÃ CẮT)" : ""} · ${result.symbols} symbol · ${result.files} file · ` +
-              `${result.businessRules} business rule · ${result.mcpQueries} MCP call · ${result.unknowns} unknown\n`,
+              `${result.businessRules} business rule · ${result.mcpQueries} MCP call · ${result.unknowns} unknown` +
+              `${result.repo ? ` · repo ${result.repo}` : ""}\n`,
           );
           process.stdout.write(`    → ${path.join(workstreamDir(taskId), "context", `${result.subTaskId}.md`)}\n`);
           for (const warning of result.warnings as string[]) process.stdout.write(`    ⚠ ${warning}\n`);

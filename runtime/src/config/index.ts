@@ -269,6 +269,11 @@ export function projectConfig(project?: string): { name: string; config: Project
   return { name, config };
 }
 
+/** Tên các project đã khai trong config/projects.yaml (multi-repo — spec 9.4). */
+export function projectNames(): string[] {
+  return Object.keys(loadConfig().projects.projects);
+}
+
 /** repoRoot của project đích, đã resolve env/default. Không có ⇒ null (không đoán — INV-06). */
 export function resolveRepoRoot(project?: string): string | null {
   const { config } = projectConfig(project);

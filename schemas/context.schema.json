@@ -10,6 +10,10 @@
     "schemaVersion": { "type": "integer", "const": 1 },
     "taskId": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
     "subTaskId": { "type": "string", "pattern": "^TASK-[0-9]{2,}$" },
+    "repo": {
+      "type": "string",
+      "description": "Project (repo) mà task này sửa — multi-repo, spec 9.4. Mọi đường dẫn trong Files là tương đối so với repoRoot của project này."
+    },
     "objective": { "type": "string" },
     "files": {
       "type": "array",
