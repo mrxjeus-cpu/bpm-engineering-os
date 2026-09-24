@@ -1,0 +1,128 @@
+{
+  "_synthetic": true,
+  "_warning": "Core mapping HƯ CẤU cho skeleton Phase 1 — không phải contract thật với Core/CORE.",
+  "coreMappings": [
+    {
+      "policyId": "POLICY-NHADAT",
+      "adapter": "CoreAdapterNhaDat",
+      "target": "CORE",
+      "inputSchema": {
+        "type": "object",
+        "required": ["customerId", "loanAmount", "tenorMonths", "purposeOfLoan", "collateralType"],
+        "properties": {
+          "customerId": { "type": "string" },
+          "loanAmount": { "type": "number", "minimum": 0 },
+          "tenorMonths": { "type": "integer", "minimum": 1, "maximum": 420 },
+          "purposeOfLoan": {
+            "type": "string",
+            "enum": ["BUY_HOUSE", "BUY_LAND", "BUILD_NEW", "REPAIR_NO_STRUCTURE_CHANGE", "FURNITURE", "OTHER"]
+          },
+          "collateralType": { "type": "string", "enum": ["REAL_ESTATE", "VEHICLE", "SAVINGS", "NONE"] },
+          "collateralValue": { "type": "number", "minimum": 0 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["eligibility", "maxLoanAmount"],
+        "properties": {
+          "eligibility": { "type": "string", "enum": ["ELIGIBLE", "REFER", "REJECT"] },
+          "maxLoanAmount": { "type": "number", "minimum": 0 },
+          "rateGrade": { "type": "string", "enum": ["A", "B", "C"] },
+          "reasonCodes": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "notes": "Adapter chuyển LoanFact/CustomerFact thành payload Core; purposeOfLoan là trường bắt buộc từ APPL.",
+      "source": "core.json#POLICY-NHADAT"
+    },
+    {
+      "policyId": "POLICY-PRESCREEN-01",
+      "adapter": "CoreAdapterPreScreen",
+      "target": "INTERNAL",
+      "inputSchema": {
+        "type": "object",
+        "required": ["customerId", "age", "monthlyIncome"],
+        "properties": {
+          "customerId": { "type": "string" },
+          "age": { "type": "integer", "minimum": 18, "maximum": 100 },
+          "monthlyIncome": { "type": "number", "minimum": 0 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["passPreScreen"],
+        "properties": {
+          "passPreScreen": { "type": "boolean" },
+          "failedChecks": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "source": "core.json#POLICY-PRESCREEN-01"
+    },
+    {
+      "policyId": "POLICY-CIC-BASIC",
+      "adapter": "CoreAdapterCicBasic",
+      "target": "CIC",
+      "inputSchema": {
+        "type": "object",
+        "required": ["customerId"],
+        "properties": { "customerId": { "type": "string" }, "nationalId": { "type": "string" } }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["cicGroup"],
+        "properties": {
+          "cicGroup": { "type": "integer", "minimum": 1, "maximum": 5 },
+          "debtClassification": { "type": "string" }
+        }
+      },
+      "source": "core.json#POLICY-CIC-BASIC"
+    },
+    {
+      "policyId": "POLICY-VAYTIEUTUNG",
+      "adapter": "CoreAdapterTieuDung",
+      "target": "CORE",
+      "inputSchema": {
+        "type": "object",
+        "required": ["customerId", "monthlyIncome", "loanAmount", "tenorMonths"],
+        "properties": {
+          "customerId": { "type": "string" },
+          "monthlyIncome": { "type": "number", "minimum": 0 },
+          "loanAmount": { "type": "number", "minimum": 0 },
+          "tenorMonths": { "type": "integer", "minimum": 1, "maximum": 60 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["maxLoanAmount"],
+        "properties": {
+          "maxLoanAmount": { "type": "number", "minimum": 0 },
+          "dtiRatio": { "type": "number" }
+        }
+      },
+      "source": "core.json#POLICY-VAYTIEUTUNG"
+    },
+    {
+      "policyId": "POLICY-VAYKINHDOANH",
+      "adapter": "CoreAdapterKinhDoanh",
+      "target": "CORE",
+      "inputSchema": {
+        "type": "object",
+        "required": ["customerId", "loanAmount", "collateralType"],
+        "properties": {
+          "customerId": { "type": "string" },
+          "loanAmount": { "type": "number", "minimum": 0 },
+          "collateralType": { "type": "string", "enum": ["REAL_ESTATE", "VEHICLE", "SAVINGS", "NONE"] },
+          "collateralValue": { "type": "number", "minimum": 0 }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["eligibility"],
+        "properties": {
+          "eligibility": { "type": "string", "enum": ["ELIGIBLE", "REFER", "REJECT"] },
+          "maxLoanAmount": { "type": "number", "minimum": 0 }
+        }
+      },
+      "source": "core.json#POLICY-VAYKINHDOANH"
+    }
+  ]
+}

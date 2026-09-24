@@ -1,0 +1,118 @@
+# config/projects.yaml — Registry dự án đích + allowlist command (spec mục 13.2, ADR-08)
+#
+# Quy tắc an toàn: MCP tool run_build/run_test/run_tests KHÔNG nhận command từ input.
+# Command chỉ được resolve từ file này; tool chỉ nhận tên suite/pattern hợp lệ.
+
+version: 1
+
+defaultProject: individual-service
+
+workspace:
+  workstreamRoot: .engineering/workstreams
+  globalRoot: .engineering/global
+  # artifact mỗi ticket: task.json · requirements.md · impact.md · architecture.md ·
+  # plan.md · tasks/ · context/ · evidence/ · reviews/ · audit.md · events.jsonl
+
+# Branch không được push/rewrite (CLAUDE.md mục 2)
+protectedBranches: ["main", "master", "dev", "develop", "production", "release/*"]
+
+projects:
+  individual-service:
+    label: "Individual — policy engine (repo đích mẫu)"
+    repoRoot:
+      env: DOMAIN_REPO_ROOT        # bắt buộc set để dùng tool cần repo
+      default: null
+    language: java
+    buildSystem: maven
+    conventions:
+      - docs/ARCHITECTURE.md
+      - README.md
+    scope:
+      allowedRoots:
+        - src/main/java
+        - src/test/java
+        - src/main/resources
+      # Deletion ngoài danh sách này bị chặn (INV-04)
+      allowDeletions: []
+    commands:
+      build:
+        - ["./mvnw", "-q", "-DskipTests", "package"]
+      test:
+        - ["./mvnw", "-q", "-Dtest={suite}", "test"]
+      testAll:
+        - ["./mvnw", "-q", "test"]
+      verify:
+        - ["./mvnw", "-q", "verify"]
+    testSuites:
+      PolicyServiceTest: {}
+      PolicyInputMapperTest: {}
+      PolicyRuleTest: {}
+      PolicyInputMapperIT:
+        profile: integration
+        timeoutMs: 1800000
+    # Chạy wave song song cần cô lập: mỗi task một git worktree riêng.
+    # Mặc định TẮT — bật khi build/test của project chạy song song an toàn và đã thống nhất
+    # quy trình branch (merge bằng `eng merge`, không tự merge vào branch bảo vệ).
+    worktrees:
+      enabled: false
+      branchPrefix: "eng/"
+      root: ".engineering/worktrees"
+      baseRef: "HEAD"
+
+  # Ví dụ thứ hai — cho thấy workstream tách theo ticket trên cùng codebase
+  policy-new:
+    label: "Policy New (module)"
+    repoRoot:
+      env: POLICY_NEW_REPO_ROOT
+      default: null
+    language: java
+    buildSystem: gradle
+    conventions:
+      - docs/ARCHITECTURE.md
+    scope:
+      allowedRoots: ["src/main/java", "src/test/java", "src/main/resources"]
+      allowDeletions: []
+    commands:
+      build:
+        - ["./gradlew", "--quiet", "assemble"]
+      test:
+        - ["./gradlew", "--quiet", "test", "--tests", "{suite}"]
+      testAll:
+        - ["./gradlew", "--quiet", "test"]
+    testSuites:
+      PolicyInputTest: {}
+      FactBuilderTest: {}
+    worktrees:
+      enabled: false
+      branchPrefix: "eng/"
+      root: ".engineering/worktrees"
+      baseRef: "HEAD"
+
+  # Fixture dùng cho smoke test (tests/). repoRoot tương đối OS_ROOT.
+  # Command được allowlist ở đây là lệnh thật, chạy được, để test chứng minh evidence có provenance.
+  sample-fixture:
+    label: "Fixture repo cho smoke test"
+    repoRoot:
+      env: SAMPLE_FIXTURE_REPO_ROOT
+      default: tests/fixtures/sample-repo
+    language: java
+    buildSystem: none
+    conventions:
+      - ARCHITECTURE.md
+      - README.md
+    scope:
+      allowedRoots:
+        - src/main/java
+        - src/test/java
+      allowDeletions: []
+    commands:
+      build:
+        - ["node", "-e", "process.stdout.write('fixture build ok')"]
+      test:
+        - ["node", "-e", "console.log('fixture ran suite: {suite}'); process.exit(0)"]
+      testAll:
+        - ["node", "-e", "console.log('fixture ran all tests')"]
+    testSuites:
+      SmokeTest: {}
+      PolicyInputMapperTest:
+        timeoutMs: 60000

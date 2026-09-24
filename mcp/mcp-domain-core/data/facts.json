@@ -1,0 +1,54 @@
+{
+  "_synthetic": true,
+  "_warning": "Fact schema HƯ CẤU cho skeleton Phase 1 — không phải contract thật của hệ thống DOMAIN/Core.",
+  "factTypes": [
+    {
+      "id": "CustomerFact",
+      "name": "Thông tin khách hàng",
+      "provider": "CIF/Core",
+      "summary": "Dữ liệu nhân khẩu và thu nhập của khách hàng cá nhân.",
+      "fields": [
+        { "name": "customerId", "type": "string", "required": true },
+        { "name": "age", "type": "integer", "required": true, "note": "Tuổi tại thời điểm đề nghị vay (PS1)" },
+        { "name": "maritalStatus", "type": "string", "required": false, "values": ["SINGLE", "MARRIED", "OTHER"] },
+        { "name": "monthlyIncome", "type": "number", "required": true, "note": "Dùng ở PS2, CT1" },
+        { "name": "occupation", "type": "string", "required": false },
+        { "name": "regionType", "type": "string", "required": false, "values": ["URBAN_1", "URBAN_2", "RURAL"] }
+      ],
+      "usedByPolicies": ["POLICY-NHADAT", "POLICY-PRESCREEN-01", "POLICY-VAYTIEUTUNG", "POLICY-VAYKINHDOANH"],
+      "source": "facts.json#CustomerFact"
+    },
+    {
+      "id": "LoanFact",
+      "name": "Thông tin khoản vay",
+      "provider": "APPL/BPM",
+      "summary": "Dữ liệu khoản vay đề nghị và tài sản bảo đảm.",
+      "fields": [
+        { "name": "loanAmount", "type": "number", "required": true },
+        { "name": "tenorMonths", "type": "integer", "required": true },
+        { "name": "purposeOfLoan", "type": "string", "required": true, "values": ["BUY_HOUSE", "BUY_LAND", "BUILD_NEW", "REPAIR_NO_STRUCTURE_CHANGE", "REPAIR_STRUCTURE_CHANGE", "FURNITURE", "BUSINESS_WORKING_CAPITAL", "CONSUMPTION", "OTHER"], "note": "Trường trọng tâm của TD1/TD2" },
+        { "name": "collateralType", "type": "string", "required": true, "values": ["REAL_ESTATE", "VEHICLE", "SAVINGS", "NONE"] },
+        { "name": "collateralValue", "type": "number", "required": false },
+        { "name": "ltvRatio", "type": "number", "required": false, "note": "Dùng ở TD3/KD1" },
+        { "name": "collateralRegionType", "type": "string", "required": false, "values": ["URBAN_1", "URBAN_2", "RURAL"] }
+      ],
+      "usedByPolicies": ["POLICY-NHADAT", "POLICY-VAYTIEUTUNG", "POLICY-VAYKINHDOANH"],
+      "source": "facts.json#LoanFact"
+    },
+    {
+      "id": "CICFact",
+      "name": "Thông tin CIC",
+      "provider": "CIC Integration",
+      "summary": "Dữ liệu lịch sử tín dụng phục vụ phân nhóm rủi ro.",
+      "fields": [
+        { "name": "cicGroup", "type": "integer", "required": true, "note": "Dùng ở TD4" },
+        { "name": "debtClassification", "type": "string", "required": true, "values": ["CURRENT", "ATTENTION", "SUBSTANDARD", "DOUBTFUL", "LOSS"] },
+        { "name": "overdueCount12m", "type": "integer", "required": true },
+        { "name": "maxOverdueDays", "type": "integer", "required": false },
+        { "name": "totalOutstanding", "type": "number", "required": false }
+      ],
+      "usedByPolicies": ["POLICY-NHADAT", "POLICY-PRESCREEN-01", "POLICY-CIC-BASIC", "POLICY-VAYTIEUTUNG"],
+      "source": "facts.json#CICFact"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+{
+  "name": "@bpm/mcp-engineering",
+  "version": "0.12.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server: repo/code/git/architecture/verification/task intelligence (BPM Engineering OS)",
+  "main": "./dist/index.js",
+  "bin": {
+    "mcp-engineering": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@bpm/engineering-os-runtime": "*",
+    "@modelcontextprotocol/sdk": "^1.30.1",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.5"
+  }
+}

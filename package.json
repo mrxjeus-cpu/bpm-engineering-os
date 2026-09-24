@@ -1,0 +1,27 @@
+{
+  "name": "bpm-engineering-os",
+  "version": "0.12.0",
+  "private": true,
+  "type": "module",
+  "description": "BPM Engineering OS — context-aware engineering operating system for BPM/BPM backend development (Phase 1)",
+  "engines": {
+    "node": ">=22"
+  },
+  "workspaces": [
+    "mcp/*",
+    "runtime"
+  ],
+  "scripts": {
+    "build": "npm run build -w @bpm/engineering-os-runtime && npm run build --workspaces --if-present",
+    "typecheck": "npm run build -w @bpm/engineering-os-runtime && npm run typecheck --workspaces --if-present",
+    "test": "npm run build && node --test --test-reporter spec \"tests/*.test.mjs\"",
+    "eng": "node runtime/dist/cli.js",
+    "mcp:engineering": "node mcp/mcp-engineering/dist/index.js",
+    "mcp:domain": "node mcp/mcp-domain-core/dist/index.js",
+    "clean": "node -e \"const {rmSync}=require('node:fs');['runtime/dist','mcp/mcp-engineering/dist','mcp/mcp-domain-core/dist'].forEach((p)=>rmSync(p,{recursive:true,force:true}))\""
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.2",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,135 @@
+{
+  "_synthetic": true,
+  "_warning": "Lịch sử thay đổi HƯ CẤU cho skeleton Phase 1 — dùng để minh họa find_similar_change / find_existing_pattern.",
+  "changes": [
+    {
+      "id": "CHG-2026-0142",
+      "ticket": "TASK-49043",
+      "date": "2026-03-18",
+      "title": "Thêm Purpose of Loan vào policy input",
+      "description": "Bổ sung trường purposeOfLoan (enum) vào PolicyInput, map qua PolicyInputMapper, thêm nhánh TD1/TD2, cập nhật Core input schema và test mapper.",
+      "policies": ["POLICY-NHADAT"],
+      "factTypes": ["LoanFact"],
+      "files": [
+        "src/main/java/.../policy/PolicyInput.java",
+        "src/main/java/.../policy/PolicyInputMapper.java",
+        "src/test/java/.../policy/PolicyInputMapperTest.java"
+      ],
+      "pattern": {
+        "name": "add-enum-input-field",
+        "steps": [
+          "Thêm hằng số/enum value",
+          "Thêm field vào PolicyInput",
+          "Map field trong PolicyInputMapper (tái sử dụng mapper hiện có, không tạo mapper mới)",
+          "Cập nhật Core input schema",
+          "Thêm test cho mapper + nhánh rule mới"
+        ],
+        "reusable": true
+      },
+      "outcome": "merged",
+      "source": "changes.json#CHG-2026-0142"
+    },
+    {
+      "id": "CHG-2026-0131",
+      "ticket": "TASK-50388",
+      "date": "2026-02-27",
+      "title": "Thêm CollateralType vào luồng thẩm định",
+      "description": "Bổ sung collateralType cho LoanFact và điều chỉnh nhánh LTV theo loại tài sản bảo đảm.",
+      "policies": ["POLICY-NHADAT", "POLICY-VAYKINHDOANH"],
+      "factTypes": ["LoanFact"],
+      "files": [
+        "src/main/java/.../fact/LoanFact.java",
+        "src/main/java/.../policy/LtvRule.java",
+        "src/test/java/.../policy/LtvRuleTest.java"
+      ],
+      "pattern": {
+        "name": "add-fact-field-and-branch",
+        "steps": [
+          "Thêm field vào fact class",
+          "Cập nhật builder/factory của fact",
+          "Thêm nhánh rule theo field mới",
+          "Bổ sung test cho từng nhánh"
+        ],
+        "reusable": true
+      },
+      "outcome": "merged",
+      "source": "changes.json#CHG-2026-0131"
+    },
+    {
+      "id": "CHG-2026-0118",
+      "ticket": "TASK-51316",
+      "date": "2026-02-05",
+      "title": "Chuẩn hóa nhóm CIC dùng chung",
+      "description": "Tách logic phân nhóm CIC thành policy dùng chung POLICY-CIC-BASIC, các policy khác tham chiếu thay vì tự tính.",
+      "policies": ["POLICY-CIC-BASIC", "POLICY-NHADAT", "POLICY-VAYTIEUTUNG"],
+      "factTypes": ["CICFact"],
+      "files": [
+        "src/main/java/.../policy/cic/CicGroupResolver.java",
+        "src/main/java/.../policy/cic/CicPolicy.java",
+        "src/test/java/.../policy/cic/CicGroupResolverTest.java"
+      ],
+      "pattern": {
+        "name": "extract-shared-policy",
+        "steps": [
+          "Tạo policy/service dùng chung",
+          "Chuyển logic trùng lặp vào đó (không đổi hành vi)",
+          "Các policy cũ gọi lại policy chung",
+          "Thêm test đối chiếu kết quả trước/sau"
+        ],
+        "reusable": true
+      },
+      "outcome": "merged",
+      "source": "changes.json#CHG-2026-0118"
+    },
+    {
+      "id": "CHG-2026-0097",
+      "ticket": "TASK-47710",
+      "date": "2026-01-16",
+      "title": "Thêm cột DB nullable lưu mã mục đích vay",
+      "description": "Thêm cột nullable purpose_code vào bảng hồ sơ, kèm migration và mapping ORM; không đổi logic hiện có.",
+      "policies": ["POLICY-NHADAT"],
+      "factTypes": [],
+      "files": [
+        "src/main/resources/db/migration/V2026_01_16__add_purpose_code.sql",
+        "src/main/java/.../entity/LoanApplication.java"
+      ],
+      "pattern": {
+        "name": "add-nullable-column",
+        "steps": [
+          "Viết migration thêm cột nullable",
+          "Map cột vào entity (không đổi constructor cũ)",
+          "Kiểm tra tương thích ngược với dữ liệu cũ"
+        ],
+        "reusable": true
+      },
+      "outcome": "merged",
+      "source": "changes.json#CHG-2026-0097"
+    },
+    {
+      "id": "CHG-2025-0912",
+      "ticket": "TASK-45201",
+      "date": "2025-11-08",
+      "title": "Sửa công thức tính hạn mức tiêu dùng",
+      "description": "Thay đổi hệ số nhân thu nhập trong CT1; đây là thay đổi nghiệp vụ nhạy cảm, cần audit sâu.",
+      "policies": ["POLICY-VAYTIEUTUNG"],
+      "factTypes": ["CustomerFact", "LoanFact"],
+      "files": [
+        "src/main/java/.../policy/consumer/LimitCalculator.java",
+        "src/test/java/.../policy/consumer/LimitCalculatorTest.java"
+      ],
+      "pattern": {
+        "name": "change-money-formula",
+        "steps": [
+          "Xác định toàn bộ nơi dùng công thức",
+          "Viết test đối chiếu số tiền trước/sau trên bộ dữ liệu biên",
+          "Thay đổi tối thiểu, không refactor ngoài scope",
+          "Audit: làm tròn, đơn vị tiền, ảnh hưởng hợp đồng đang chạy"
+        ],
+        "reusable": true,
+        "risk": "CRITICAL"
+      },
+      "outcome": "merged",
+      "source": "changes.json#CHG-2025-0912"
+    }
+  ]
+}

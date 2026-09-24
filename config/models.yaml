@@ -1,0 +1,94 @@
+# config/models.yaml — Model routing (spec mục 12)
+#
+# Nguyên tắc: Model = f(complexity, risk, context, taskType) — KHÔNG phải "cheapest".
+# Trong banking, tiết kiệm token không đáng nếu dẫn tới sai policy.
+# KHÔNG hard-code provider (INV-07): tên dưới đây là *tier*, runtime map tier -> model thật.
+
+version: 1
+
+# Tier trừu tượng -> model cụ thể. Đổi ở đây, không sửa code.
+tiers:
+  cheap: glm-text          # model nội bộ / chi phí thấp, dùng cho dịch & phân loại
+  small: haiku
+  medium: sonnet
+  large: opus
+
+# Mặc định theo vai trò agent (spec mục 10)
+agents:
+  translator: cheap
+  researcher: medium
+  requirements: medium
+  impact: medium
+  architect: large
+  developer: medium
+  reviewer: medium
+  auditor: large
+
+# Điều chỉnh theo độ phức tạp task
+complexity:
+  simple: small
+  medium: medium
+  complex: large
+
+# Sàn theo risk tier: risk càng cao thì model tối thiểu càng mạnh
+riskFloor:
+  LOW: small
+  MEDIUM: medium
+  HIGH: medium
+  CRITICAL: large
+
+routing:
+  weights:
+    complexity: 0.4
+    risk: 0.4
+    contextSize: 0.1
+    phase: 0.1
+  caps:
+    minTier: small
+    maxTier: large
+    fallback: medium
+  # Không hạ tier xuống dưới riskFloor, kể cả khi complexity thấp.
+  neverBelowRiskFloor: true
+
+# Ví dụ tham chiếu (dùng cho test/review, không phải rule cứng)
+examples:
+  - change: "Đổi enum"
+    tier: small
+  - change: "Thêm DTO + mapper"
+    tier: medium
+  - change: "Sửa policy logic (TD1/TD2)"
+    tier: medium
+  - change: "Sửa công thức tính tiền vay"
+    tier: large
+  - change: "Thiết kế lại kiến trúc"
+    tier: large
+
+# ---------------------------------------------------------------- harness
+# Lệnh chạy worker agent (spec mục 10). Runtime KHÔNG hard-code provider nào (INV-07):
+# nó build prompt theo prompt contract rồi chạy command khai báo ở đây.
+#
+# Placeholder trong command/cwd: {prompt} {repoRoot} {osRoot} {taskId} {subTaskId}
+# Env truyền cho worker: ENG_PROMPT_FILE, ENG_TASK_ID, ENG_SUBTASK_ID, ENG_CONTEXT_FILE,
+#   ENG_ROLE, ENG_MODEL_TIER, ENG_WORKSTREAM, ENG_OS_ROOT
+harness:
+  default:
+    enabled: false            # bật + sửa cho đúng môi trường trước khi dùng thật
+    description: "Claude Code (ví dụ)"
+    command: ["claude", "-p", "{prompt}"]
+    cwd: "{repoRoot}"
+    timeoutMs: 1800000
+
+  codex:
+    enabled: false
+    description: "Codex CLI (ví dụ)"
+    command: ["codex", "exec", "{prompt}"]
+    cwd: "{repoRoot}"
+    timeoutMs: 1800000
+
+  # Dry run: chỉ in đường dẫn prompt, không gọi LLM — dùng để xem worker sẽ nhận gì.
+  dry:
+    enabled: true
+    description: "Không gọi LLM — kiểm tra prompt contract và luồng chạy"
+    command: ["node", "-e", "console.log('DRY RUN — prompt:', process.env.ENG_PROMPT_FILE)"]
+    cwd: "{osRoot}"
+    timeoutMs: 60000

@@ -1,0 +1,86 @@
+# config/risk.yaml — Risk engine (spec mục 11.2)
+#
+# Output: LOW | MEDIUM | HIGH | CRITICAL
+# Risk quyết định: model tier, số human gate bắt buộc, độ sâu audit, có cho parallel hay không.
+# Đây là risk kỹ thuật/nghiệp vụ, KHÔNG phải đánh giá chính trị.
+
+version: 1
+
+scale: [LOW, MEDIUM, HIGH, CRITICAL]
+
+# Điểm >= ngưỡng thì nhận tier tương ứng (điểm cộng dồn từ factors)
+thresholds:
+  MEDIUM: 3
+  HIGH: 6
+  CRITICAL: 10
+
+factors:
+  - id: dbChange
+    label: "Thay đổi schema/DB"
+    points: 3
+    criticalIf: [dropColumn, dropTable, dataMigration, nonNullableAdd]
+  - id: apiChange
+    label: "Thay đổi API/contract"
+    points: 3
+    criticalIf: [breakingChange, responseShapeChange]
+  - id: policyChange
+    label: "Thay đổi policy/rule nghiệp vụ"
+    points: 4
+    criticalIf: [eligibilityRule, pricingRule]
+  - id: coreIntegration
+    label: "Tích hợp Core/CORE/đối tác"
+    points: 4
+  - id: moneyCalculation
+    label: "Ảnh hưởng tính toán tiền/lãi/phí"
+    points: 6
+    criticalIf: [loanAmount, interestRate, fee, repaymentSchedule]
+  - id: security
+    label: "Ảnh hưởng bảo mật/phân quyền/dữ liệu cá nhân"
+    points: 4
+  - id: concurrency
+    label: "Ảnh hưởng transaction/concurrency/idempotency"
+    points: 3
+  - id: backwardCompatibility
+    label: "Rủi ro tương thích ngược"
+    points: 3
+  - id: blastRadius
+    label: "Nhiều service/module bị ảnh hưởng"
+    points: 2
+    scalesWithCount: true
+
+effects:
+  LOW:
+    modelTierFloor: small
+    requiredHumanGates: []
+    auditDepth: standard
+    allowParallel: true
+    requirePlanApproval: false
+  MEDIUM:
+    modelTierFloor: medium
+    requiredHumanGates: [architecture]
+    auditDepth: standard
+    allowParallel: true
+    requirePlanApproval: false
+  HIGH:
+    modelTierFloor: medium
+    requiredHumanGates: [architecture, implementationPlan]
+    auditDepth: deep
+    allowParallel: false
+    requirePlanApproval: true
+  CRITICAL:
+    modelTierFloor: large
+    requiredHumanGates: [requirements, impact, architecture, implementationPlan]
+    auditDepth: exhaustive
+    allowParallel: false
+    requirePlanApproval: true
+    requireHumanFinalVerification: true
+
+examples:
+  - change: "Thêm cột DB nullable"
+    risk: LOW
+  - change: "Thêm DTO + mapper + test"
+    risk: LOW
+  - change: "Sửa policy rule TD1/TD2"
+    risk: HIGH
+  - change: "Đổi công thức tính số tiền vay"
+    risk: CRITICAL

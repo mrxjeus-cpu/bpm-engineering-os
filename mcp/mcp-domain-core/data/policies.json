@@ -1,0 +1,237 @@
+{
+  "_synthetic": true,
+  "_warning": "Policy HƯ CẤU cho skeleton Phase 1. Điều kiện/rules không phải quy định thật của BPM.",
+  "policies": [
+    {
+      "id": "POLICY-NHADAT",
+      "code": "individual-nhadat",
+      "name": "Policy vay mua nhà đất",
+      "productId": "PRD-NHADAT",
+      "status": "active",
+      "version": "2026.03",
+      "owner": "DOMAIN Product Team (synthetic)",
+      "summary": "Xét điều kiện vay mua nhà/đất dựa trên CustomerFact, LoanFact, CICFact và mục đích vay.",
+      "inputs": [
+        { "id": "CustomerFact", "type": "fact", "required": true, "source": "facts.json#CustomerFact" },
+        { "id": "LoanFact", "type": "fact", "required": true, "source": "facts.json#LoanFact" },
+        { "id": "CICFact", "type": "fact", "required": true, "source": "facts.json#CICFact" },
+        { "id": "PurposeOfLoan", "type": "input", "required": true, "source": "APPL.purposeOfLoan" },
+        { "id": "CollateralType", "type": "input", "required": true, "source": "APPL.collateralType" }
+      ],
+      "outputs": [
+        { "id": "Eligibility", "type": "decision", "values": ["ELIGIBLE", "REFER", "REJECT"] },
+        { "id": "MaxLoanAmount", "type": "number", "source": "core.json#POLICY-NHADAT/outputSchema.maxLoanAmount" },
+        { "id": "InterestRateGrade", "type": "string", "source": "core.json#POLICY-NHADAT/outputSchema.rateGrade" }
+      ],
+      "rules": [
+        {
+          "id": "TD1",
+          "title": "Mục đích sửa chữa nhà / mua sắm nội thất",
+          "statement": "Nếu mục đích vay là sửa chữa nhà KHÔNG thay đổi kết cấu HOẶC mua sắm nội thất thì được xét như mục đích mua nhà đất.",
+          "condition": "purposeOfLoan IN [REPAIR_NO_STRUCTURE_CHANGE, FURNITURE]",
+          "effect": "ELIGIBLE (nhóm mục đích nhà đất)",
+          "tags": ["eligibility", "purpose"],
+          "effectiveFrom": "2026-01-01",
+          "source": "policies.json#POLICY-NHADAT/rules/TD1"
+        },
+        {
+          "id": "TD2",
+          "title": "Mục đích khác",
+          "statement": "Nếu mục đích vay không thuộc nhóm nhà đất thì hồ sơ chuyển sang luồng thẩm định thủ công.",
+          "condition": "purposeOfLoan NOT IN [BUY_HOUSE, BUY_LAND, REPAIR_NO_STRUCTURE_CHANGE, FURNITURE, BUILD_NEW]",
+          "effect": "REFER",
+          "tags": ["eligibility", "purpose"],
+          "effectiveFrom": "2026-01-01",
+          "source": "policies.json#POLICY-NHADAT/rules/TD2"
+        },
+        {
+          "id": "TD3",
+          "title": "Tỷ lệ LTV tối đa",
+          "statement": "Tỷ lệ vay trên giá trị tài sản bảo đảm không vượt quá 70% đối với nhà đất tại đô thị loại 1.",
+          "condition": "ltvRatio <= 0.70 AND collateralRegionType = URBAN_1",
+          "effect": "MaxLoanAmount = 0.70 * collateralValue",
+          "tags": ["limit", "ltv"],
+          "effectiveFrom": "2026-01-01",
+          "source": "policies.json#POLICY-NHADAT/rules/TD3"
+        },
+        {
+          "id": "TD4",
+          "title": "Nhóm CIC",
+          "statement": "Khách hàng thuộc nhóm CIC 3 trở lên bị từ chối tự động.",
+          "condition": "cicGroup >= 3",
+          "effect": "REJECT",
+          "tags": ["risk", "cic"],
+          "effectiveFrom": "2026-01-01",
+          "source": "policies.json#POLICY-NHADAT/rules/TD4"
+        }
+      ],
+      "dependencies": [
+        {
+          "policyId": "POLICY-PRESCREEN-01",
+          "type": "precondition",
+          "description": "Pre-screening phải chạy trước để loại hồ sơ không đủ điều kiện tối thiểu."
+        },
+        {
+          "policyId": "POLICY-CIC-BASIC",
+          "type": "fact-provider",
+          "description": "Cung cấp CICFact (cicGroup) dùng ở TD4."
+        }
+      ],
+      "coreAdapter": "CoreAdapterNhaDat",
+      "updatedAt": "2026-03-15",
+      "source": "policies.json#POLICY-NHADAT"
+    },
+    {
+      "id": "POLICY-PRESCREEN-01",
+      "code": "individual-prescreen-01",
+      "name": "Policy pre-screening cá nhân",
+      "productId": "PRD-NHADAT",
+      "status": "active",
+      "version": "2026.01",
+      "owner": "DOMAIN Product Team (synthetic)",
+      "summary": "Sàng lọc tối thiểu: độ tuổi, thu nhập tối thiểu, tình trạng nợ xấu.",
+      "inputs": [
+        { "id": "CustomerFact", "type": "fact", "required": true, "source": "facts.json#CustomerFact" },
+        { "id": "CICFact", "type": "fact", "required": true, "source": "facts.json#CICFact" }
+      ],
+      "outputs": [{ "id": "PassPreScreen", "type": "boolean" }],
+      "rules": [
+        {
+          "id": "PS1",
+          "title": "Độ tuổi",
+          "statement": "Tuổi tại thời điểm đề nghị vay từ 20 đến 65.",
+          "condition": "age >= 20 AND age <= 65",
+          "effect": "PassPreScreen = true (nếu các điều kiện khác đạt)",
+          "tags": ["eligibility"],
+          "source": "policies.json#POLICY-PRESCREEN-01/rules/PS1"
+        },
+        {
+          "id": "PS2",
+          "title": "Thu nhập tối thiểu",
+          "statement": "Thu nhập hàng tháng tối thiểu 8.000.000 VND đối với khu vực đô thị.",
+          "condition": "monthlyIncome >= 8000000",
+          "effect": "PassPreScreen = true (nếu các điều kiện khác đạt)",
+          "tags": ["eligibility", "income"],
+          "source": "policies.json#POLICY-PRESCREEN-01/rules/PS2"
+        }
+      ],
+      "dependencies": [],
+      "coreAdapter": "CoreAdapterPreScreen",
+      "updatedAt": "2026-01-20",
+      "source": "policies.json#POLICY-PRESCREEN-01"
+    },
+    {
+      "id": "POLICY-CIC-BASIC",
+      "code": "individual-cic-basic",
+      "name": "Policy phân nhóm CIC cơ bản",
+      "productId": "PRD-NHADAT",
+      "status": "active",
+      "version": "2026.02",
+      "owner": "Risk Team (synthetic)",
+      "summary": "Chuẩn hóa CICFact thành nhóm rủi ro dùng chung cho các policy tín dụng.",
+      "inputs": [{ "id": "CICFact", "type": "fact", "required": true, "source": "facts.json#CICFact" }],
+      "outputs": [{ "id": "cicGroup", "type": "integer", "values": [1, 2, 3, 4, 5] }],
+      "rules": [
+        {
+          "id": "CIC1",
+          "title": "Nhóm 1",
+          "statement": "Không có nợ quá hạn và không có nợ cần chú ý trong 12 tháng gần nhất.",
+          "condition": "overdueCount12m = 0 AND debtClassification = CURRENT",
+          "effect": "cicGroup = 1",
+          "tags": ["risk"],
+          "source": "policies.json#POLICY-CIC-BASIC/rules/CIC1"
+        },
+        {
+          "id": "CIC2",
+          "title": "Nhóm 3 trở lên",
+          "statement": "Có nợ quá hạn từ 30 ngày trở lên trong 12 tháng gần nhất ⇒ nhóm 3 trở lên.",
+          "condition": "overdueCount12m >= 1 AND maxOverdueDays >= 30",
+          "effect": "cicGroup >= 3",
+          "tags": ["risk"],
+          "source": "policies.json#POLICY-CIC-BASIC/rules/CIC2"
+        }
+      ],
+      "dependencies": [],
+      "coreAdapter": "CoreAdapterCicBasic",
+      "updatedAt": "2026-02-10",
+      "source": "policies.json#POLICY-CIC-BASIC"
+    },
+    {
+      "id": "POLICY-VAYTIEUTUNG",
+      "code": "individual-vaytieutung",
+      "name": "Policy vay tiêu dùng tín chấp",
+      "productId": "PRD-VAYTIEUTUNG",
+      "status": "active",
+      "version": "2026.02",
+      "owner": "DOMAIN Product Team (synthetic)",
+      "summary": "Hạn mức theo thu nhập, không tài sản bảo đảm.",
+      "inputs": [
+        { "id": "CustomerFact", "type": "fact", "required": true, "source": "facts.json#CustomerFact" },
+        { "id": "LoanFact", "type": "fact", "required": true, "source": "facts.json#LoanFact" },
+        { "id": "CICFact", "type": "fact", "required": true, "source": "facts.json#CICFact" }
+      ],
+      "outputs": [{ "id": "MaxLoanAmount", "type": "number" }],
+      "rules": [
+        {
+          "id": "CT1",
+          "title": "Hạn mức theo thu nhập",
+          "statement": "Hạn mức tối đa bằng 12 lần thu nhập hàng tháng.",
+          "condition": "monthlyIncome > 0",
+          "effect": "MaxLoanAmount = 12 * monthlyIncome",
+          "tags": ["limit"],
+          "source": "policies.json#POLICY-VAYTIEUTUNG/rules/CT1"
+        },
+        {
+          "id": "CT2",
+          "title": "Không có tài sản bảo đảm",
+          "statement": "Sản phẩm tín chấp: không sử dụng tài sản bảo đảm trong tính toán.",
+          "condition": "collateralType = NONE",
+          "effect": "Không áp dụng LTV",
+          "tags": ["structure"],
+          "source": "policies.json#POLICY-VAYTIEUTUNG/rules/CT2"
+        }
+      ],
+      "dependencies": [
+        { "policyId": "POLICY-PRESCREEN-01", "type": "precondition", "description": "Sàng lọc tối thiểu." },
+        { "policyId": "POLICY-CIC-BASIC", "type": "fact-provider", "description": "Phân nhóm CIC." }
+      ],
+      "coreAdapter": "CoreAdapterTieuDung",
+      "updatedAt": "2026-02-12",
+      "source": "policies.json#POLICY-VAYTIEUTUNG"
+    },
+    {
+      "id": "POLICY-VAYKINHDOANH",
+      "code": "individual-vaykinhdoanh",
+      "name": "Policy vay kinh doanh hộ cá thể",
+      "productId": "PRD-VAYKINHDOANH",
+      "status": "active",
+      "version": "2026.02",
+      "owner": "DOMAIN Product Team (synthetic)",
+      "summary": "Vay kinh doanh, có thể dùng bất động sản làm tài sản bảo đảm tương tự nhà đất.",
+      "inputs": [
+        { "id": "CustomerFact", "type": "fact", "required": true, "source": "facts.json#CustomerFact" },
+        { "id": "LoanFact", "type": "fact", "required": true, "source": "facts.json#LoanFact" },
+        { "id": "CollateralType", "type": "input", "required": true, "source": "APPL.collateralType" }
+      ],
+      "outputs": [{ "id": "Eligibility", "type": "decision", "values": ["ELIGIBLE", "REFER", "REJECT"] }],
+      "rules": [
+        {
+          "id": "KD1",
+          "title": "Tài sản bảo đảm là bất động sản",
+          "statement": "Nếu tài sản bảo đảm là bất động sản thì áp dụng quy tắc LTV của policy nhà đất.",
+          "condition": "collateralType = REAL_ESTATE",
+          "effect": "Tham chiếu POLICY-NHADAT/TD3",
+          "tags": ["limit", "ltv"],
+          "source": "policies.json#POLICY-VAYKINHDOANH/rules/KD1"
+        }
+      ],
+      "dependencies": [
+        { "policyId": "POLICY-NHADAT", "type": "rule-reference", "description": "Tham chiếu TD3 cho LTV bất động sản." },
+        { "policyId": "POLICY-PRESCREEN-01", "type": "precondition", "description": "Sàng lọc tối thiểu." }
+      ],
+      "coreAdapter": "CoreAdapterKinhDoanh",
+      "updatedAt": "2026-02-18",
+      "source": "policies.json#POLICY-VAYKINHDOANH"
+    }
+  ]
+}

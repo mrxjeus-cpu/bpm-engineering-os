@@ -1,0 +1,39 @@
+{
+  "_synthetic": true,
+  "_warning": "Dataset HƯ CẤU dùng cho skeleton Phase 1. Không phải định nghĩa sản phẩm/policy thật của BPM. Phase 3 thay bằng nguồn thật qua MCP domain.",
+  "products": [
+    {
+      "id": "PRD-NHADAT",
+      "code": "individual-nhadat",
+      "name": "Vay mua nhà đất",
+      "segment": "individual",
+      "summary": "Sản phẩm vay mua nhà/đất cho khách hàng cá nhân, có tài sản bảo đảm là chính bất động sản mua.",
+      "policies": ["POLICY-NHADAT", "POLICY-PRESCREEN-01", "POLICY-CIC-BASIC"],
+      "channels": ["BPM", "APPL"],
+      "status": "active",
+      "source": "products.json#PRD-NHADAT"
+    },
+    {
+      "id": "PRD-VAYTIEUTUNG",
+      "code": "individual-vaytieutung",
+      "name": "Vay tiêu dùng tín chấp",
+      "segment": "individual",
+      "summary": "Sản phẩm vay tiêu dùng không tài sản bảo đảm, hạn mức theo thu nhập.",
+      "policies": ["POLICY-VAYTIEUTUNG", "POLICY-PRESCREEN-01", "POLICY-CIC-BASIC"],
+      "channels": ["BPM", "APPL"],
+      "status": "active",
+      "source": "products.json#PRD-VAYTIEUTUNG"
+    },
+    {
+      "id": "PRD-VAYKINHDOANH",
+      "code": "individual-vaykinhdoanh",
+      "name": "Vay kinh doanh hộ cá thể",
+      "segment": "individual_business",
+      "summary": "Sản phẩm vay phục vụ hoạt động kinh doanh của hộ kinh doanh cá thể.",
+      "policies": ["POLICY-VAYKINHDOANH", "POLICY-PRESCREEN-01"],
+      "channels": ["BPM"],
+      "status": "active",
+      "source": "products.json#PRD-VAYKINHDOANH"
+    }
+  ]
+}

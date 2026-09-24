@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpm.local/engineering-os/schemas/event.schema.json",
+  "title": "DomainEvent",
+  "description": "Lifecycle event (spec mục 14). Superpowers thiếu event surface cho hệ thống ngoài — Engineering OS thiết kế ngay từ đầu. Agent không cần biết consumer tồn tại.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "eventId", "type", "taskId", "at", "actor"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "eventId": { "type": "string" },
+    "type": {
+      "type": "string",
+      "enum": [
+        "TaskCreated",
+        "RequirementCompleted",
+        "ImpactCompleted",
+        "DesignApproved",
+        "PlanCreated",
+        "TaskStarted",
+        "TaskCompleted",
+        "AgentRun",
+        "ReviewFailed",
+        "ReviewPassed",
+        "AuditFailed",
+        "AuditPassed",
+        "HumanApprovalRequired",
+        "Blocked",
+        "Completed"
+      ]
+    },
+    "taskId": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
+    "subTaskId": { "type": ["string", "null"] },
+    "at": { "type": "string", "format": "date-time" },
+    "actor": {
+      "type": "string",
+      "description": "orchestrator | <agentRole> | human:<id> | mcp:<server>"
+    },
+    "fromStatus": { "type": ["string", "null"] },
+    "toStatus": { "type": ["string", "null"] },
+    "wave": { "type": ["integer", "null"] },
+    "evidenceRef": { "type": ["string", "null"] },
+    "payload": {
+      "type": "object",
+      "description": "Dữ liệu phụ thuộc loại event. Không chứa nội dung code/context lớn — chỉ tham chiếu.",
+      "additionalProperties": true
+    }
+  }
+}

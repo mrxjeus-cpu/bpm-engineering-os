@@ -1,0 +1,23 @@
+# Chuẩn hoá line ending cho môi trường hỗn hợp: dev trên macOS, clone về Windows corporate.
+# Không set eol cho file không phải text để tránh git sửa nội dung nhị phân.
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.pdf  binary
+*.jar  binary
+*.zip  binary
+
+# Tài liệu/JSON/YAML/TS trong repo này luôn LF để diff không nhiễu
+*.md    text eol=lf
+*.json  text eol=lf
+*.yaml  text eol=lf
+*.yml   text eol=lf
+*.ts    text eol=lf
+*.mjs   text eol=lf
+*.js    text eol=lf
+
+# Không hiển thị lockfile trong review
+package-lock.json -diff linguist-generated=true

@@ -1,0 +1,31 @@
+{
+  "name": "@bpm/engineering-os-runtime",
+  "version": "0.12.0",
+  "private": true,
+  "type": "module",
+  "description": "BPM Engineering OS — runtime core: config, state store, evidence store, event bus, CLI (spec mục 8, 14, 17)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "eng": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "start": "node dist/cli.js"
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
+    "yaml": "^2.9.1"
+  }
+}

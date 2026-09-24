@@ -1,0 +1,77 @@
+# config/gates.yaml — Human gates + evidence gates (spec mục 11)
+#
+# Evidence gate KHÔNG được bypass (INV-03). Human gate bypass được theo mode + risk.
+
+version: 1
+
+# Mode mặc định: normal, KHÔNG autonomous (ADR-06)
+defaultMode: normal
+
+modes:
+  safe:
+    description: "Task HIGH/CRITICAL, thay đổi nghiệp vụ nhạy cảm"
+    humanGates: [requirements, impact, architecture, implementationPlan]
+    allowedRisk: [LOW, MEDIUM, HIGH, CRITICAL]
+    allowParallel: false
+  normal:
+    description: "Mặc định cho đa số task"
+    humanGates: [architecture]
+    allowedRisk: [LOW, MEDIUM, HIGH, CRITICAL]
+    allowParallel: true
+  autonomous:
+    description: "Chỉ task LOW risk, có allowlist rõ ràng"
+    humanGates: []
+    allowedRisk: [LOW]
+    allowParallel: true
+
+gates:
+  - id: requirements
+    type: human
+    transition: [REQUIREMENT_ANALYSIS, IMPACT_ANALYSIS]
+    required: false
+    bypassInModes: [normal, autonomous]
+
+  - id: impact
+    type: human
+    transition: [IMPACT_ANALYSIS, DESIGNING]
+    required: false
+    bypassInModes: [normal, autonomous]
+
+  # Gate bắt buộc: không approve kiến trúc thì không được implement (INV-05)
+  # Transition phải khớp state machine (spec mục 8.1): DESIGNING → WAITING_DESIGN_APPROVAL → PLANNING
+  - id: architecture
+    type: human
+    transition: [WAITING_DESIGN_APPROVAL, PLANNING]
+    required: true
+    bypassInModes: []
+    bypassIfRiskAtMost: LOW       # chỉ hạ được khi risk LOW + có cấu hình
+    bypassRequiresConfigFlag: true
+
+  - id: implementationPlan
+    type: human
+    transition: [PLANNING, READY_TO_IMPLEMENT]
+    required: false
+    requiredIfAny: [dbMigration, apiContractChange, coreIntegration]
+    bypassInModes: [autonomous]
+
+  - id: evidence
+    type: automated
+    transition: ["*", "*"]
+    required: true
+    bypassInModes: []
+    rule: RULES-001               # xem schemas/evidence.schema.json
+    requires: [testsExecuted, outputInspected, requirementsChecked, diffInspected, auditPassed]
+
+  - id: scope
+    type: automated
+    transition: [IMPLEMENTING, REVIEWING]
+    required: true
+    bypassInModes: []
+    tool: validate_change_scope
+    onViolation: BLOCKED
+
+approvals:
+  # Cách ghi nhận approval: evidence type HUMAN_APPROVAL, có approver + timestamp
+  evidenceType: HUMAN_APPROVAL
+  requiredFields: [gateId, approver, approvedAt, comment]
+  store: .engineering/workstreams/<TASK_ID>/evidence/

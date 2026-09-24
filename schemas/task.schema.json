@@ -1,0 +1,132 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpm.local/engineering-os/schemas/task.schema.json",
+  "title": "TaskState",
+  "description": "State machine của một ticket (spec mục 8.1, 8.2). Đây là nguồn sự thật thay cho conversation (INV-02).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["taskId", "status", "phase", "risk", "mode", "createdAt", "updatedAt"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "taskId": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$",
+      "description": "Mã ticket, ví dụ TASK-49043"
+    },
+    "title": { "type": "string", "maxLength": 300 },
+    "status": {
+      "type": "string",
+      "description": "Trạng thái chính. BLOCKED là nhánh phụ, không thay thế status hiện tại.",
+      "enum": [
+        "NEW",
+        "TRANSLATING",
+        "REQUIREMENT_ANALYSIS",
+        "IMPACT_ANALYSIS",
+        "DESIGNING",
+        "WAITING_DESIGN_APPROVAL",
+        "PLANNING",
+        "WAITING_PLAN_APPROVAL",
+        "READY_TO_IMPLEMENT",
+        "IMPLEMENTING",
+        "FAILED",
+        "DEBUGGING",
+        "REVIEWING",
+        "REWORK_REQUIRED",
+        "AUDITING",
+        "VERIFYING",
+        "DONE"
+      ]
+    },
+    "phase": {
+      "type": "string",
+      "enum": [
+        "translate",
+        "requirements",
+        "impact",
+        "architecture",
+        "planning",
+        "implementation",
+        "review",
+        "audit",
+        "verification",
+        "done"
+      ]
+    },
+    "risk": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+    "riskScore": { "type": "integer", "minimum": 0 },
+    "riskFactors": { "type": "array", "items": { "type": "string" } },
+    "mode": { "type": "string", "enum": ["safe", "normal", "autonomous"] },
+    "currentWave": { "type": "integer", "minimum": 0 },
+    "currentTasks": { "type": "array", "items": { "type": "string" } },
+    "completedTasks": { "type": "array", "items": { "type": "string" } },
+    "blocked": { "type": "boolean", "default": false },
+    "blockReason": {
+      "type": ["string", "null"],
+      "description": "Bắt buộc có nội dung khi blocked = true (INV-06: nói rõ thiếu gì, không đoán)"
+    },
+    "domains": {
+      "type": "array",
+      "description": "Dùng cho MCP capability routing (config/mcp.yaml → routing.byDomain)",
+      "items": { "type": "string" },
+      "examples": [["domain", "loan"]]
+    },
+    "capabilities": { "type": "array", "items": { "type": "string" } },
+    "approvals": {
+      "type": "object",
+      "description": "gateId -> đã approve hay chưa (evidence HUMAN_APPROVAL tương ứng)",
+      "additionalProperties": { "type": "boolean" }
+    },
+    "evidence": {
+      "type": "array",
+      "description": "Đường dẫn tương đối trong workstream",
+      "items": { "type": "string" }
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": { "type": ["string", "null"] },
+      "examples": [
+        {
+          "requirements": "requirements.md",
+          "impact": "impact.md",
+          "architecture": "architecture.md",
+          "plan": "plan.md",
+          "audit": "audit.md"
+        }
+      ]
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "branch": { "type": "string" },
+        "baseRef": { "type": "string" },
+        "baseSha": { "type": "string" },
+        "headSha": { "type": "string" }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "to"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "from": { "type": ["string", "null"] },
+          "to": { "type": "string" },
+          "by": { "type": "string" },
+          "reason": { "type": "string" },
+          "evidenceRef": { "type": "string" }
+        }
+      }
+    },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "blocked": { "const": true } }, "required": ["blocked"] },
+      "then": { "required": ["blockReason"] }
+    }
+  ]
+}

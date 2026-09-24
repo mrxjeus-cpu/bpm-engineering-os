@@ -1,0 +1,98 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpm.local/engineering-os/schemas/evidence.schema.json",
+  "title": "Evidence",
+  "description": "Bằng chứng cho một transition trạng thái (spec mục 8.3, 8.4 — RULES-001). INV-12: mọi evidence phải có provenance.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "taskId", "type", "status", "timestamp", "producer"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "id": { "type": "string", "pattern": "^EV-[0-9]{4,}$" },
+    "taskId": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
+    "subTaskId": { "type": ["string", "null"] },
+    "type": {
+      "type": "string",
+      "enum": [
+        "TEST",
+        "BUILD",
+        "SPEC_REVIEW",
+        "QUALITY_REVIEW",
+        "AUDIT",
+        "GIT_DIFF",
+        "SCOPE_VALIDATION",
+        "HUMAN_APPROVAL",
+        "MCP_QUERY",
+        "SIMILAR_CODE_SEARCH"
+      ]
+    },
+    "status": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED", "INFO"] },
+    "summary": { "type": "string", "maxLength": 500 },
+
+    "command": {
+      "type": "string",
+      "description": "Lệnh đã chạy (không phải lệnh dự kiến chạy)"
+    },
+    "cwd": { "type": "string" },
+    "exitCode": { "type": "integer" },
+    "durationMs": { "type": "integer", "minimum": 0 },
+    "gitSha": { "type": "string" },
+    "artifact": {
+      "type": "string",
+      "description": "Đường dẫn log/output đã lưu (bằng chứng đọc được lại)"
+    },
+
+    "producer": {
+      "type": "string",
+      "description": "Ai tạo evidence: orchestrator | <agentRole>:<subTaskId> | human:<id> | mcp:<server>"
+    },
+    "gateId": { "type": ["string", "null"] },
+    "approver": { "type": ["string", "null"], "description": "Bắt buộc với HUMAN_APPROVAL" },
+    "approvedAt": { "type": ["string", "null"], "format": "date-time" },
+    "comment": { "type": ["string", "null"] },
+
+    "checks": {
+      "type": "array",
+      "description": "Với AUDIT/REVIEW: danh sách hạng mục đã kiểm",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "result"],
+        "properties": {
+          "id": { "type": "string" },
+          "result": { "type": "string", "enum": ["PASS", "FAIL", "N/A"] },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "unexpectedFiles": { "type": "array", "items": { "type": "string" } },
+    "deletedFiles": { "type": "array", "items": { "type": "string" } },
+    "mcpQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "server": { "type": "string" },
+        "tool": { "type": "string" },
+        "args": { "type": "object" }
+      }
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "description": "INV-12: evidence thực thi phải có provenance đầy đủ",
+      "if": { "properties": { "type": { "enum": ["TEST", "BUILD"] } }, "required": ["type"] },
+      "then": { "required": ["command", "cwd", "exitCode", "gitSha", "artifact"] }
+    },
+    {
+      "description": "HUMAN_APPROVAL phải ghi ai approve, gate nào, khi nào",
+      "if": { "properties": { "type": { "const": "HUMAN_APPROVAL" } }, "required": ["type"] },
+      "then": { "required": ["gateId", "approver", "approvedAt"] }
+    },
+    {
+      "description": "SCOPE_VALIDATION phải nêu rõ file phát sinh/xóa",
+      "if": { "properties": { "type": { "const": "SCOPE_VALIDATION" } }, "required": ["type"] },
+      "then": { "required": ["unexpectedFiles", "deletedFiles"] }
+    }
+  ]
+}

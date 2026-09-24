@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpm.local/engineering-os/schemas/review.schema.json",
+  "title": "Review",
+  "description": "Kết quả review 2 tầng (spec mục 10.5, 20). 'Code đúng' ≠ 'đúng yêu cầu' — nên tách SPEC và QUALITY.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "taskId", "stage", "status", "reviewer", "timestamp"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "taskId": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
+    "subTaskId": { "type": ["string", "null"] },
+    "stage": {
+      "type": "string",
+      "enum": ["SPEC", "QUALITY", "FINAL", "AUDIT"],
+      "description": "SPEC = có đúng yêu cầu? QUALITY = có tốt về kỹ thuật? FINAL = whole-branch. AUDIT = an toàn với hệ thống ngân hàng?"
+    },
+    "status": { "type": "string", "enum": ["PASS", "FAIL", "BLOCKED"] },
+    "reviewer": { "type": "string", "description": "Agent/người review (context độc lập với producer)" },
+    "diffRef": { "type": ["string", "null"], "description": "git SHA / đường dẫn diff đã review" },
+    "reviewedFiles": { "type": "array", "items": { "type": "string" } },
+    "evidenceRefs": {
+      "type": "array",
+      "description": "Evidence đã đọc. Review KHÔNG tự claim test mới; nếu chưa có evidence do producer tạo ⇒ BLOCKED.",
+      "items": { "type": "string" }
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "result"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Hạng mục kiểm theo stage",
+            "examples": [
+              "SPEC_COMPLIANCE",
+              "AC_COVERAGE",
+              "BUSINESS_RULE_COVERAGE",
+              "CODE_QUALITY",
+              "REGRESSION",
+              "SECURITY",
+              "PERFORMANCE",
+              "TEST_COVERAGE",
+              "EXISTING_PATTERN_REUSE",
+              "BACKWARD_COMPATIBILITY",
+              "TRANSACTION_BOUNDARY",
+              "CONCURRENCY",
+              "DATA_INTEGRITY",
+              "LOGGING",
+              "EXCEPTION_HANDLING",
+              "SCOPE_COMPLIANCE"
+            ]
+          },
+          "result": { "type": "string", "enum": ["PASS", "FAIL", "N/A"] },
+          "note": { "type": "string" }
+        }
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["severity", "message"],
+        "properties": {
+          "severity": { "type": "string", "enum": ["BLOCKER", "MAJOR", "MINOR", "NIT"] },
+          "category": { "type": "string" },
+          "file": { "type": "string" },
+          "symbol": { "type": "string" },
+          "line": { "type": "integer" },
+          "message": { "type": "string" },
+          "requirementRef": { "type": "string", "description": "AC/business rule bị vi phạm" },
+          "suggestion": { "type": "string" }
+        }
+      }
+    },
+    "verdict": {
+      "type": ["string", "null"],
+      "enum": ["APPROVE", "REWORK_REQUIRED", "ESCALATE_TO_HUMAN", null]
+    },
+    "timestamp": { "type": "string", "format": "date-time" }
+  },
+  "allOf": [
+    {
+      "description": "Review FAIL phải kèm ít nhất 1 issue có severity BLOCKER/MAJOR",
+      "if": { "properties": { "status": { "const": "FAIL" } }, "required": ["status"] },
+      "then": {
+        "properties": {
+          "issues": {
+            "type": "array",
+            "minItems": 1,
+            "contains": { "properties": { "severity": { "enum": ["BLOCKER", "MAJOR"] } }, "required": ["severity"] }
+          }
+        },
+        "required": ["issues"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bpm.local/engineering-os/schemas/plan.schema.json",
+  "title": "Plan",
+  "description": "Implementation plan (spec mục 9.3). Plan compiler chuyển tasks[] + dependencies[] thành DAG → waves.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "taskId", "tasks"],
+  "properties": {
+    "schemaVersion": { "type": "integer", "const": 1 },
+    "taskId": { "type": "string", "pattern": "^[A-Z][A-Z0-9]+-[0-9]+$" },
+    "architectureRef": { "type": "string", "description": "Đường dẫn architecture.md đã được approve" },
+    "source": { "type": ["string", "null"], "description": "File markdown nguồn đã sinh ra plan này (provenance)" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "tasks": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "objective", "dependencies", "acceptanceCriteria", "verification"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^TASK-[0-9]{2,}$" },
+          "title": { "type": "string", "maxLength": 200 },
+          "objective": { "type": "string" },
+          "files": {
+            "type": "array",
+            "description": "Đường dẫn chính xác file sửa/tạo",
+            "items": { "type": "string" }
+          },
+          "symbols": {
+            "type": "array",
+            "items": { "type": "string" },
+            "examples": [["PolicyService.buildInput", "PolicyInputMapper.map"]]
+          },
+          "existingPattern": {
+            "type": ["string", "null"],
+            "description": "Pattern có sẵn phải tái sử dụng (skill existing-code-first). Null phải kèm lý do ở 'deviation'."
+          },
+          "deviation": {
+            "type": ["string", "null"],
+            "description": "Lý do không tái sử dụng pattern có sẵn"
+          },
+          "businessRules": { "type": "array", "items": { "type": "string" } },
+          "constraints": { "type": "array", "items": { "type": "string" } },
+          "tests": { "type": "array", "items": { "type": "string" } },
+          "dependencies": {
+            "type": "array",
+            "description": "Danh sách TASK-xx phải DONE trước; rỗng = có thể vào wave 1",
+            "items": { "type": "string", "pattern": "^TASK-[0-9]{2,}$" }
+          },
+          "acceptanceCriteria": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+          "verification": {
+            "type": "array",
+            "minItems": 1,
+            "description": "Cách kiểm chứng cụ thể (test nào, lệnh nào, kiểm gì)",
+            "items": { "type": "string" }
+          },
+          "risk": { "type": "string", "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"] },
+          "modelTier": { "type": "string" },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "IN_PROGRESS", "TESTING", "SPEC_REVIEW", "QUALITY_REVIEW", "DONE", "FAILED", "REWORK_REQUIRED", "BLOCKED"]
+          }
+        }
+      }
+    },
+    "waves": {
+      "type": "array",
+      "description": "Do plan compiler sinh ra; chỉ ghi khi đã qua conflict check (INV-11)",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["index", "tasks"],
+        "properties": {
+          "index": { "type": "integer", "minimum": 1 },
+          "tasks": { "type": "array", "items": { "type": "string" } },
+          "conflictCheck": { "type": "string", "enum": ["PASS", "FAIL", "NOT_RUN"] },
+          "conflicts": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

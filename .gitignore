@@ -1,0 +1,24 @@
+# dependencies / build
+node_modules/
+dist/
+*.tsbuildinfo
+
+# local npm cache (dùng khi registry chặn cache mặc định)
+.npm-cache/
+
+# runtime state & artifacts (INV-02: state sống ngoài LLM context)
+.engineering/
+
+# logs / coverage / env
+*.log
+logs/
+coverage/
+.env
+.env.*
+!.env.example
+
+# OS/editor
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json.example

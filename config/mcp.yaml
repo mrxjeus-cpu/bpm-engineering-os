@@ -1,0 +1,102 @@
+# config/mcp.yaml — MCP servers, capability routing, output limits (spec mục 13)
+#
+# Vì sao cần file này: schema MCP là chi phí token LẶP LẠI mỗi turn (INV-10).
+# Chỉ bật group/toolset liên quan phase hiện tại.
+#
+# Đọc bởi: mcp/mcp-engineering và mcp/mcp-domain-core (env MCP_CONFIG để override đường dẫn).
+
+version: 1
+
+# ---------------------------------------------------------------- routing
+# Phase nào được thấy server nào (INV-10). Router của runtime dùng bảng này.
+routing:
+  byPhase:
+    translate:      [mcp-engineering, mcp-domain-core]
+    requirements:   [mcp-engineering, mcp-domain-core]
+    impact:         [mcp-engineering, mcp-domain-core]
+    architecture:   [mcp-engineering, mcp-domain-core]
+    planning:       [mcp-engineering]
+    implementation: [mcp-engineering]
+    review:         [mcp-engineering]
+    audit:          [mcp-engineering, mcp-domain-core]
+    verification:   [mcp-engineering]
+  byDomain:
+    domain:  [mcp-domain-core]
+    loan:  [mcp-domain-core]
+    card:  [mcp-card]        # chưa tồn tại ở Phase 1 — chỉ là cấu hình trước
+    deposit: [mcp-deposit]   # chưa tồn tại ở Phase 1
+  default: [mcp-engineering]
+
+# ---------------------------------------------------------------- limits
+# MCP result phải nhỏ, có cấu trúc, có phân trang (spec 13.1)
+limits:
+  maxResults: 25
+  maxBytes: 262144          # 256 KB — vượt thì cắt + ghi "truncated": true
+  maxSnippetLines: 40
+  maxSymbolBodyLines: 200
+  pagination:
+    defaultPageSize: 10
+    maxPageSize: 50
+
+  # Ngân sách context cho ContextCompiler (spec mục 7.5) — cắt TRƯỚC khi tới LLM.
+  # Vượt trần ⇒ runtime rút snippet dần và ghi budget.truncated = true.
+  context:
+    maxTokens: 6000
+    maxSymbols: 4
+    maxSnippetLines: 40
+    maxSimilar: 5
+    maxRules: 12
+    maxArchitectureConstraints: 12
+    # Ngân sách skill nhúng vào prompt (skill router chọn theo role + phase)
+    maxSkills: 6
+    maxSkillTokens: 2000
+
+# ---------------------------------------------------------------- servers
+servers:
+  mcp-engineering:
+    transport: stdio
+    command: node
+    args: ["mcp/mcp-engineering/dist/index.js"]
+    description: "Repo/code/git/architecture/verification/task intelligence"
+    # Bật/tắt theo group. Dev: bật hết. Production: chỉ bật group cần cho phase.
+    groups:
+      context: true
+      code: true
+      architecture: true
+      git: true
+      verification: true
+      task: true
+    repo:
+      # repoRoot lấy từ env; không hard-code đường dẫn máy cá nhân
+      rootEnv: DOMAIN_REPO_ROOT
+      rootDefault: null
+    scan:
+      include: ["**/*.java", "**/*.ts", "**/*.tsx", "**/*.js", "**/*.sql", "**/*.xml", "**/*.yml", "**/*.yaml", "**/*.md", "**/*.properties"]
+      excludeDirs: [".git", "node_modules", "dist", "build", "target", "out", ".idea", ".gradle", ".engineering", ".mvn", "coverage", ".npm-cache"]
+      maxFileBytes: 1048576   # bỏ qua file lớn hơn 1 MB khi index/search
+    verification:
+      # Command KHÔNG bao giờ lấy từ tool input — chỉ resolve từ allowlist này (ADR-08)
+      allowPatternRuns: true
+      patternWhitelist: "^[A-Za-z0-9_.*?,-]+$"
+      timeoutMs: 900000
+      recordEvidence: true
+
+  mcp-domain-core:
+    transport: stdio
+    command: node
+    args: ["mcp/mcp-domain-core/dist/index.js"]
+    description: "Domain DOMAIN: product/policy/fact/core/reference"
+    groups:
+      product: true
+      policy: true
+      fact: true
+      core: true
+      reference: true
+    data:
+      # Dataset Phase 1 là SYNTHETIC (hư cấu). Phase 3 thay bằng nguồn policy thật.
+      dir: "mcp/mcp-domain-core/data"
+      synthetic: true
+    behavior:
+      progressiveDisclosure: true   # find_* trả summary, get_* mới trả chi tiết
+      requireSourceRefs: true       # mọi kết quả phải kèm source
+      failClosed: true              # thiếu dữ liệu => lỗi rõ ràng, không suy diễn (INV-06)
