@@ -52,8 +52,11 @@ limits:
     maxSkillTokens: 2000
 
 # ---------------------------------------------------------------- servers
+# `enabled: false` = TẠM DỪNG server: runtime không spawn, ContextCompiler không gọi,
+# `eng doctor` chỉ ghi chú (không FAIL). Code/dataset vẫn nằm trong repo để bật lại 1 dòng.
 servers:
   mcp-engineering:
+    enabled: true
     transport: stdio
     command: node
     args: ["mcp/mcp-engineering/dist/index.js"]
@@ -82,6 +85,11 @@ servers:
       recordEvidence: true
 
   mcp-domain-core:
+    # TẠM DỪNG (chưa phù hợp với mô hình "nhiều hệ thống, mỗi hệ thống n repo" — xem SPEC 13.3).
+    # Hệ quả khi tắt: context CHỈ có dữ liệu kỹ thuật từ mcp-engineering; KHÔNG có policy/rule
+    # nghiệp vụ ⇒ worker không được suy diễn (INV-06), `eng context` sẽ in cảnh báo rõ.
+    # Bật lại: đổi thành true (dataset hiện là hư cấu — phải thay nguồn thật trước khi dùng).
+    enabled: false
     transport: stdio
     command: node
     args: ["mcp/mcp-domain-core/dist/index.js"]

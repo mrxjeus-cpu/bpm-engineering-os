@@ -1,5 +1,12 @@
 # mcp-domain-core
 
+> ⏸ **SERVER NÀY ĐANG TẠM DỪNG** — `config/mcp.yaml → servers.mcp-domain-core.enabled: false`.
+> Runtime không spawn server này; `eng doctor --ping` ghi `mcp-domain-core: TẮT (enabled: false)`;
+> `eng context` in cảnh báo và worker **không được suy diễn** policy/rule (INV-06).
+> Code + 17 tool + dataset vẫn nằm nguyên trong repo — bật lại bằng `enabled: true`.
+> Lý do tạm dừng: xem `SPEC-bpm-engineering-os.md` mục 13.3.
+
+
 MCP server cung cấp **domain intelligence DOMAIN**: product, policy, rule, fact, core adapter, reference.
 
 > ⚠️ Dataset trong `data/` là **HƯ CẤU** (`"_synthetic": true`), chỉ để chạy skeleton Phase 1. Không phải định nghĩa sản phẩm/policy thật của BPM. Phase 3 thay bằng nguồn thật (DB/service nội bộ).

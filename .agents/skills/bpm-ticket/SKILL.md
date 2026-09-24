@@ -9,6 +9,13 @@ whenToUse: Người dùng nói "chạy ticket", "làm ticket TASK-xxxx", "ticket
 Adapter mỏng: nguồn sự thật vẫn là `GETTING-STARTED.md` (mục 4, 5, 9) và `RUNBOOK.md` (mục 4).
 Skill này chỉ để khỏi phải nhớ cú pháp — KHÔNG chép lại luật nghiệp vụ.
 
+## Trạng thái MCP (đọc trước khi hứa hẹn gì)
+
+- `mcp-engineering`: **đang bật** — tra code/symbol/git, chạy build/test theo allowlist, ghi evidence.
+- `mcp-domain-core`: **TẠM DỪNG** (`config/mcp.yaml → enabled: false`). Đừng hứa "tra policy/rule nghiệp vụ";
+  `eng context` sẽ in cảnh báo `MCP đang TẮT theo config (mcp-domain-core)`. Khi thiếu dữ liệu nghiệp vụ:
+  báo `BLOCKED`, **không suy diễn** (INV-06).
+
 ## Trước khi chạy: xác định 3 biến
 
 ```bash

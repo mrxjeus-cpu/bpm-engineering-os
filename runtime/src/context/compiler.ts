@@ -360,6 +360,13 @@ export async function compileTaskContext(options: CompileOptions): Promise<Compi
     if (gathering.unavailable.length > 0) {
       warnings.push(`MCP không dùng được: ${gathering.unavailable.join("; ")}`);
     }
+    const disabledServers = gathering.disabled ?? [];
+    if (disabledServers.length > 0) {
+      warnings.push(
+        `MCP đang TẮT theo config (${disabledServers.join(", ")}) ⇒ context chỉ có dữ liệu kỹ thuật từ mcp-engineering; ` +
+          "KHÔNG có policy/rule nghiệp vụ và KHÔNG được suy diễn (INV-06). Bật lại: config/mcp.yaml → servers.<tên>.enabled = true.",
+      );
+    }
 
     assertValid("context", context, `context ${options.subTaskId} của ${options.taskId}`);
 

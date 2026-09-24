@@ -29,7 +29,7 @@ Spec đầy đủ: [`SPEC-bpm-engineering-os.md`](./SPEC-bpm-engineering-os.md)
 | `runtime/` Metrics | ✅ `eng metrics <TASK_ID>` — thời gian theo status, context token (ước lượng), evidence gate tái dựng tại thời điểm transition, human gate wait, block episode; metric không đo được thì khai báo rõ chứ không ước lượng thay |
 | `runtime/` Doctor (preflight) | ✅ `eng doctor [--project P] [--ping]` — kiểm env, cấu hình, gate↔state machine, model routing, harness/binary, MCP build+routing, skill catalog, repo đích (git/branch/scope/worktree); `--ping` khởi động thật 2 MCP server |
 | `runtime/` Cost theo tier | ✅ event `AgentRun` ghi model tier + thời gian + token (nếu harness báo `ENG_USAGE_FILE`); không có nguồn thì `eng metrics` nói rõ chứ không ước lượng |
-| `mcp/mcp-domain-core` | ✅ thin server chạy được (stdio), 17 tool + sample dataset synthetic |
+| `mcp/mcp-domain-core` | ⏸ **TẠM DỪNG** (`enabled: false` trong `config/mcp.yaml`) — code + 17 tool vẫn còn, dataset synthetic; bật lại bằng 1 dòng khi mô hình nguồn nghiệp vụ đã rõ |
 | `skills/` (17 skill) · `agents/` (6) · `workflows/` (12) · `templates/` (8) | ✅ đã viết; skill do router chọn, agent/workflow/template là instruction thật |
 | `tests/` | ✅ 250 test: 20 runtime/state + 23 plan/graph + 13 context + 21 agent + 19 skill + 21 recovery + 16 phase + 13 song song/khoá + 22 MCP + 9 path contract + 9 symbol index + 20 metrics + 14 doctor + 22 multi-repo + 8 continue |
 
@@ -130,7 +130,12 @@ Quy tắc an toàn:
 - `record_evidence` luôn ghi kèm provenance: `command`, `cwd`, `exitCode`, `gitSha`, `artifact`, `producer` (**INV-12**).
 - Tool cần repo nhưng chưa cấu hình `repoRoot` ⇒ trả lỗi rõ ràng, **không** đoán dữ liệu (**INV-06**).
 
-### `mcp-domain-core` — domain intelligence
+### `mcp-domain-core` — domain intelligence  ⏸ TẠM DỪNG
+
+> Server này đang **tạm dừng** (`config/mcp.yaml → servers.mcp-domain-core.enabled: false`) vì mô hình dữ liệu
+> nghiệp vụ chưa khớp với cách tổ chức thực tế (nhiều hệ thống, mỗi hệ thống nhiều repo). Khi tắt: context chỉ có
+> dữ liệu kỹ thuật từ `mcp-engineering`, `eng context` in cảnh báo rõ và worker **không được suy diễn** policy (INV-06).
+> Code, tool và dataset vẫn nằm nguyên trong repo để bật lại.
 
 | Group | Tool |
 |---|---|

@@ -356,7 +356,7 @@ describe("eng doctor — CLI", () => {
     assert.match(renderDoctor(report), /sửa hết FAIL/);
   });
 
-  it("--ping khởi động MCP thật và đếm được tool của 2 server", async () => {
+  it("--ping: server bật thì đếm tool, server tắt thì ghi rõ TẮT (không FAIL)", async () => {
     const result = await runCli(["doctor", "--json", "--ping"]);
     assert.equal(result.code, 0, result.stderr);
     const report = JSON.parse(result.stdout);
@@ -364,6 +364,18 @@ describe("eng doctor — CLI", () => {
     assert.ok(ping, "phải có check mcp-ping");
     assert.equal(ping.level, "ok", ping.detail);
     assert.match(ping.detail, /mcp-engineering: 31 tool \/ 6 group/);
-    assert.match(ping.detail, /mcp-domain-core: 17 tool \/ 5 group/);
+    // mcp-domain-core đang TẠM DỪNG trong config/mcp.yaml ⇒ không spawn, chỉ nêu trạng thái.
+    assert.match(ping.detail, /mcp-domain-core: TẮT \(enabled: false\)/);
+  });
+
+  it("server tắt là GHI CHÚ, không phải FAIL; doctor vẫn 0 fail", async () => {
+    const result = await runCli(["doctor", "--json"]);
+    assert.equal(result.code, 0, result.stderr);
+    const report = JSON.parse(result.stdout);
+    const mcp = report.checks.find((check) => check.id === "mcp");
+    assert.ok(mcp);
+    assert.equal(mcp.level, "ok", mcp.detail);
+    assert.match(String(mcp.detail), /mcp-domain-core: ĐANG TẮT/);
+    assert.equal(report.summary.fail, 0, JSON.stringify(report.summary));
   });
 });

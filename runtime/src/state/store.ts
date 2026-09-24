@@ -78,7 +78,7 @@ const NEXT_ACTIONS: Record<TaskStatus, string> = {
   NEW: "chạy workflow translate (researcher) để tạo requirements.md",
   TRANSLATING: "hoàn tất requirements.md + open_questions.md + assumptions.md, rồi chuyển REQUIREMENT_ANALYSIS",
   REQUIREMENT_ANALYSIS: "chốt acceptance criteria + business rules, chuyển IMPACT_ANALYSIS",
-  IMPACT_ANALYSIS: "chạy impact analysis qua mcp-engineering + mcp-domain-core, tạo impact.md",
+  IMPACT_ANALYSIS: "chạy impact analysis qua mcp-engineering (mcp-domain-core nếu đang bật), tạo impact.md",
   DESIGNING: "architect tạo architecture.md (options A/B/C + decision), chuyển WAITING_DESIGN_APPROVAL",
   WAITING_DESIGN_APPROVAL: "chờ human approve kiến trúc (evidence HUMAN_APPROVAL gateId=architecture), rồi chuyển PLANNING",
   PLANNING: "tạo plan.md (task nhỏ, có AC + verification), rồi chuyển READY_TO_IMPLEMENT",
