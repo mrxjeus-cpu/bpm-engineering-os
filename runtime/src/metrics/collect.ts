@@ -1,6 +1,8 @@
 import path from "node:path";
 import { EventBus } from "../events/bus.js";
 import { EvidenceStore } from "../evidence/store.js";
+import { readPlan } from "../plan/store.js";
+import { reposForState } from "../repos.js";
 import { StateStore } from "../state/store.js";
 import type { TaskContext } from "../context/types.js";
 import { listFilesRecursive, readJsonFile, workstreamDir } from "../workspace.js";
@@ -22,5 +24,14 @@ export function collectMetrics(taskId: string, options: { root?: string } = {}):
     .map((file) => readJsonFile<TaskContext>(path.join(dir, "context", file)))
     .filter((context): context is TaskContext => context !== null);
 
-  return computeMetrics({ state, evidence: evidenceStore.list(taskId), contexts, events: bus.read(taskId) });
+  // Multi-repo (spec 9.4): metrics phải nhìn đúng danh sách repo của ticket khi tính gate coverage.
+  const projects = reposForState(state, readPlan(taskId, options.root));
+
+  return computeMetrics({
+    state,
+    evidence: evidenceStore.list(taskId),
+    contexts,
+    events: bus.read(taskId),
+    projects,
+  });
 }

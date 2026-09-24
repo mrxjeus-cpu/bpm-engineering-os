@@ -39,6 +39,8 @@ export interface TaskContext {
   schemaVersion: 1;
   taskId: string;
   subTaskId: string;
+  /** Repo (project trong config/projects.yaml) mà task này sửa — multi-repo, spec 9.4. */
+  repo?: string;
   objective: string;
   files?: string[];
   symbols?: ContextSymbol[];

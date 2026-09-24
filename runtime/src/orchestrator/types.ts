@@ -51,7 +51,7 @@ export const PHASES: Record<PhaseName, PhaseSpec> = {
   analyze: {
     name: "analyze",
     title: "Phân tích yêu cầu + ảnh hưởng",
-    allowedFrom: ["REQUIREMENT_ANALYSIS"],
+    allowedFrom: ["REQUIREMENT_ANALYSIS", "IMPACT_ANALYSIS"],
     steps: [
       "advance → IMPACT_ANALYSIS",
       "chạy agent impact (dùng mcp-engineering + mcp-domain-core) → impact.md",
@@ -74,7 +74,7 @@ export const PHASES: Record<PhaseName, PhaseSpec> = {
   plan: {
     name: "plan",
     title: "Lập kế hoạch + chia wave",
-    allowedFrom: ["WAITING_DESIGN_APPROVAL", "PLANNING"],
+    allowedFrom: ["WAITING_DESIGN_APPROVAL", "PLANNING", "WAITING_PLAN_APPROVAL"],
     steps: [
       "kiểm HUMAN_APPROVAL gateId=architecture; advance → PLANNING",
       "nếu chưa có plan.md: chạy agent architect với skill writing-plan → plan.md",
@@ -86,7 +86,7 @@ export const PHASES: Record<PhaseName, PhaseSpec> = {
   implement: {
     name: "implement",
     title: "Thực thi theo wave",
-    allowedFrom: ["READY_TO_IMPLEMENT", "IMPLEMENTING", "REWORK_REQUIRED", "DEBUGGING"],
+    allowedFrom: ["READY_TO_IMPLEMENT", "IMPLEMENTING", "REWORK_REQUIRED", "DEBUGGING", "FAILED"],
     steps: [
       "advance → IMPLEMENTING",
       "compile context cho mọi task chưa DONE (context slicing)",

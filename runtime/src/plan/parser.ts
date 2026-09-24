@@ -7,6 +7,7 @@ import type { PlanTask, RiskLevel } from "../types.js";
  * Định dạng nguồn:
  *   ## TASK-01 — Tiêu đề
  *   ### Objective            (text tự do)
+ *   ### Repo                 (tên project trong config/projects.yaml — bắt buộc khi ticket chạm nhiều repo)
  *   ### Files                (- bullet hoặc "A.java, B.java")
  *   ### Symbols
  *   ### Dependencies         (none | TASK-01, TASK-02)
@@ -22,7 +23,15 @@ import type { PlanTask, RiskLevel } from "../types.js";
  */
 
 export interface ParseError {
-  code: "NO_TASKS" | "DUPLICATE_TASK" | "MISSING_OBJECTIVE" | "MISSING_ACCEPTANCE_CRITERIA" | "MISSING_VERIFICATION" | "INVALID_DEPENDENCY" | "INVALID_RISK";
+  code:
+    | "NO_TASKS"
+    | "DUPLICATE_TASK"
+    | "MISSING_OBJECTIVE"
+    | "MISSING_ACCEPTANCE_CRITERIA"
+    | "MISSING_VERIFICATION"
+    | "INVALID_DEPENDENCY"
+    | "INVALID_RISK"
+    | "MULTIPLE_REPO";
   message: string;
   taskId?: string;
   line?: number;
@@ -36,6 +45,7 @@ export interface ParseResult {
 
 type FieldName =
   | "objective"
+  | "repo"
   | "files"
   | "symbols"
   | "dependencies"
@@ -53,6 +63,13 @@ const FIELD_ALIASES: Record<string, FieldName> = {
   objective: "objective",
   "muc tieu": "objective",
   "mục tiêu": "objective",
+  repo: "repo",
+  project: "repo",
+  repository: "repo",
+  "repo dich": "repo",
+  "repo đích": "repo",
+  "kho ma nguon": "repo",
+  "kho mã nguồn": "repo",
   files: "files",
   file: "files",
   symbols: "symbols",
@@ -105,6 +122,7 @@ interface Accumulator {
 function emptyFields(): Record<FieldName, string[]> {
   return {
     objective: [],
+    repo: [],
     files: [],
     symbols: [],
     dependencies: [],
@@ -281,6 +299,23 @@ export function parsePlanMarkdown(markdown: string): ParseResult {
           ),
     );
 
+    // Repo của task (multi-repo, spec 9.4): lấy định danh đầu tiên, bỏ phần chú thích.
+    const repoValues = [
+      ...new Set(
+        accumulator.fields.repo
+          .map((value) => /[A-Za-z0-9][A-Za-z0-9._-]*/.exec(value.trim())?.[0] ?? "")
+          .filter((value) => value !== ""),
+      ),
+    ];
+    if (repoValues.length > 1) {
+      errors.push({
+        code: "MULTIPLE_REPO",
+        message: `${accumulator.id} khai báo nhiều Repo (${repoValues.join(", ")}) — mỗi task chỉ sửa MỘT repo; hãy tách thành task riêng.`,
+        taskId: accumulator.id,
+        line: accumulator.headingLine,
+      });
+    }
+
     const riskRaw = accumulator.fields.risk.join(" ").trim().toUpperCase();
     let risk: RiskLevel | undefined;
     if (riskRaw !== "") {
@@ -316,6 +351,7 @@ export function parsePlanMarkdown(markdown: string): ParseResult {
     const businessRules = dedupe(accumulator.fields.businessRules);
     const constraints = dedupe(accumulator.fields.constraints);
     const tests = dedupe(accumulator.fields.tests);
+    if (repoValues[0] !== undefined) task.repo = repoValues[0];
     if (files.length > 0) task.files = files;
     if (symbols.length > 0) task.symbols = symbols;
     if (businessRules.length > 0) task.businessRules = businessRules;

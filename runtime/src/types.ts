@@ -57,6 +57,12 @@ export interface TaskState {
   completedTasks?: string[];
   blocked: boolean;
   blockReason?: string | null;
+  /**
+   * Repo đích của ticket (spec mục 9.4 — multi-repo). Thứ tự có nghĩa:
+   * phần tử đầu là repo CHÍNH (mặc định cho task không khai `### Repo`).
+   * Rỗng/không có ⇒ dùng `defaultProject` trong config/projects.yaml.
+   */
+  projects?: string[];
   domains?: string[];
   capabilities?: string[];
   approvals?: Record<string, boolean>;
@@ -97,6 +103,11 @@ export interface Evidence {
   type: EvidenceType;
   status: EvidenceStatus;
   summary?: string;
+  /**
+   * Project (repo) mà evidence này thuộc về — bắt buộc về mặt NGỮ NGHĨA khi ticket
+   * chạm nhiều repo: gate DONE đòi BUILD/TEST/SCOPE_VALIDATION cho TỪNG repo (spec 9.4).
+   */
+  project?: string;
   command?: string;
   cwd?: string;
   exitCode?: number;
@@ -135,6 +146,11 @@ export interface PlanTask {
   id: string;
   title: string;
   objective: string;
+  /**
+   * Project trong config/projects.yaml mà task này sửa (spec mục 9.4).
+   * Không khai ⇒ repo chính của ticket. Bắt buộc khi ticket chạm nhiều repo.
+   */
+  repo?: string;
   files?: string[];
   symbols?: string[];
   existingPattern?: string | null;

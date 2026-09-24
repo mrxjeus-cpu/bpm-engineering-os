@@ -82,6 +82,8 @@ export interface TaskMetrics {
   status: TaskStatus;
   risk: RiskLevel;
   mode: string;
+  /** Repo của ticket (multi-repo — spec 9.4). */
+  projects: string[];
   window: { createdAt: string; updatedAt: string; wallMs: number };
   timeInStatus: TimeInStatus[];
   context: {
@@ -97,6 +99,8 @@ export interface TaskMetrics {
     total: number;
     byType: Record<string, number>;
     byStatus: Record<string, number>;
+    /** Đếm evidence theo repo (multi-repo — spec 9.4); evidence không gắn repo nằm ở khoá "(không gắn repo)". */
+    byProject: Record<string, number>;
     provenance: { complete: number; missingRequired: number; incomplete: { id: string; type: EvidenceType; missing: string[] }[] };
   };
   transitions: {
@@ -236,7 +240,7 @@ function gateEpisodes(state: TaskState, evidence: Evidence[]): GateEpisode[] {
   return episodes;
 }
 
-function evidenceCoverage(state: TaskState, evidence: Evidence[]) {
+function evidenceCoverage(state: TaskState, evidence: Evidence[], projects: string[] = []) {
   const uncovered: UncoveredTransition[] = [];
   let gated = 0;
   let covered = 0;
@@ -247,7 +251,7 @@ function evidenceCoverage(state: TaskState, evidence: Evidence[]) {
     gated += 1;
     const at = Date.parse(entry.at);
     const available = evidence.filter((item) => Date.parse(item.timestamp) <= at);
-    const evaluation = evaluateEvidenceGate(to, available, { risk: state.risk });
+    const evaluation = evaluateEvidenceGate(to, available, { risk: state.risk, ...(projects.length > 0 ? { projects } : {}) });
     if (evaluation.ok) covered += 1;
     else uncovered.push({ at: entry.at, transition: `${entry.from ?? "?"} → ${to}`, missing: evaluation.missing });
   }
@@ -330,10 +334,13 @@ export interface MetricsInput {
   evidence: Evidence[];
   contexts: TaskContext[];
   events: DomainEvent[];
+  /** Repo của ticket (multi-repo — spec 9.4); rỗng/1 phần tử ⇒ xử lý như single-repo. */
+  projects?: string[];
 }
 
 export function computeMetrics(input: MetricsInput): TaskMetrics {
   const { state, evidence, contexts, events } = input;
+  const projects = input.projects ?? [];
   const createdAt = Date.parse(state.createdAt);
   const updatedAt = Date.parse(state.updatedAt);
 
@@ -347,7 +354,7 @@ export function computeMetrics(input: MetricsInput): TaskMetrics {
     .map((item) => ({ id: item.id, type: item.type, missing: missingProvenance(item) }))
     .filter((item) => item.missing.length > 0);
 
-  const coverage = evidenceCoverage(state, evidence);
+  const coverage = evidenceCoverage(state, evidence, projects);
   const reviews = evidence.filter((item) => item.type === "SPEC_REVIEW" || item.type === "QUALITY_REVIEW");
   const reviewFailed = reviews.filter((item) => item.status !== "PASS").length;
 
@@ -361,6 +368,7 @@ export function computeMetrics(input: MetricsInput): TaskMetrics {
     status: state.status,
     risk: state.risk,
     mode: state.mode,
+    projects,
     window: {
       createdAt: state.createdAt,
       updatedAt: state.updatedAt,
@@ -380,6 +388,7 @@ export function computeMetrics(input: MetricsInput): TaskMetrics {
       total: evidence.length,
       byType: countBy(evidence.map((item) => item.type)),
       byStatus: countBy(evidence.map((item) => item.status as EvidenceStatus)),
+      byProject: countBy(evidence.map((item) => item.project ?? "(không gắn repo)")),
       provenance: { complete: evidence.length - incomplete.length, missingRequired: incomplete.length, incomplete },
     },
     transitions: {
@@ -487,6 +496,12 @@ export function renderMetrics(metrics: TaskMetrics): string {
   }
   lines.push(`- theo loại: ${Object.entries(metrics.evidence.byType).map(([k, v]) => `${k}=${v}`).join(" ") || "—"}`);
   lines.push(`- theo kết quả: ${Object.entries(metrics.evidence.byStatus).map(([k, v]) => `${k}=${v}`).join(" ") || "—"}`);
+  if ((metrics.projects?.length ?? 0) > 1) {
+    lines.push(
+      `- theo repo: ${Object.entries(metrics.evidence.byProject).map(([k, v]) => `${k}=${v}`).join(" ") || "—"}` +
+        ` (multi-repo — gate DONE đòi BUILD/TEST/SCOPE_VALIDATION cho TỪNG repo)`,
+    );
+  }
   lines.push("");
 
   lines.push("## Evidence gate & human gate (INV-03, INV-05)", "");

@@ -96,6 +96,15 @@ export function renderContextMarkdown(context: TaskContext): string {
   const lines: string[] = [];
   lines.push(`# Context — ${context.taskId} / ${context.subTaskId}`);
   lines.push("");
+  if (context.repo !== undefined && context.repo !== "") {
+    lines.push("## Repo (BẮT BUỘC đọc trước)");
+    lines.push(`- project: \`${context.repo}\``);
+    lines.push(
+      "- Mọi đường dẫn trong mục Files/Symbols là TƯƠNG ĐỐI so với repoRoot của project trên." +
+        " Không sửa file của repo khác trong task này.",
+    );
+    lines.push("");
+  }
   lines.push("## Objective");
   lines.push(context.objective);
   lines.push("");
@@ -198,6 +207,14 @@ export async function compileTaskContext(options: CompileOptions): Promise<Compi
   const providers = options.providers ?? createProviders({ project: options.project, limits });
   const ownsProviders = options.providers === undefined;
 
+  // Multi-repo (spec 9.4): repo của TASK thắng project truyền từ CLI — mỗi task có thể ở repo khác.
+  const effectiveProject = task.repo !== undefined && task.repo !== "" ? task.repo : options.project;
+  if (options.project !== undefined && effectiveProject !== undefined && effectiveProject !== options.project) {
+    warnings.push(
+      `Task ${task.id} thuộc repo "${effectiveProject}", khác --project "${options.project}" — dùng repo của task.`,
+    );
+  }
+
   try {
     const taskText = [task.objective, ...(task.businessRules ?? []), ...(task.files ?? []), task.title].join("\n");
     const gathering = await providers.gather({
@@ -208,7 +225,7 @@ export async function compileTaskContext(options: CompileOptions): Promise<Compi
       symbols: [...(task.symbols ?? [])],
       tests: [...(task.tests ?? [])],
       policyIds: policyIdsFrom(taskText),
-      ...(options.project ? { project: options.project } : {}),
+      ...(effectiveProject ? { project: effectiveProject } : {}),
     });
 
     const files = [...new Set([...(task.files ?? []), ...gathering.files])];
@@ -256,6 +273,7 @@ export async function compileTaskContext(options: CompileOptions): Promise<Compi
       schemaVersion: 1,
       taskId: options.taskId,
       subTaskId: options.subTaskId,
+      ...(effectiveProject ? { repo: effectiveProject } : {}),
       objective: task.objective,
       files,
       symbols,

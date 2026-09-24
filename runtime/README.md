@@ -53,6 +53,8 @@ eng recover <TASK_ID> [<TASK-NN>] [--apply] [--max-attempts N] [--by WHO] [--jso
 Phase (spec mục 9.1 — gói sẵn chuỗi bước của một pha):
 eng translate|analyze|design|plan|implement|review|audit|verify <TASK_ID>
     [--harness NAME] [--project P] [--dry-run] [--no-recover] [--json]
+eng continue <TASK_ID> [--harness NAME] [--project P] [--max-steps N] [--dry-run] [--no-recover] [--json]
+    # chạy các pha kế tiếp tới khi: DONE | human gate | evidence gate | phải merge | lỗi
 ```
 
 Chuỗi đầy đủ cho một ticket:
@@ -72,6 +74,32 @@ eng verify    TASK-49043 --project <project>  # build + test + scope tươi → 
 
 `--dry-run` in ra danh sách bước mà không đổi gì (kiểm trước khi chạy thật).
 
+### `eng continue` — chạy liên tiếp (đường mặc định cho việc hằng ngày)
+
+Không cần nhớ chuỗi 8 phase: `eng continue` đọc `task.json.status`, suy ra phase kế tiếp và chạy
+liên tiếp cho tới khi gặp việc **phải do người quyết**.
+
+```bash
+eng continue TASK-49043 --harness <harness> --project individual-service
+# → translate → analyze → design, rồi DỪNG ở human gate (exit 1) và in đúng lệnh cần gõ tiếp
+eng record TASK-49043 --type HUMAN_APPROVAL --status PASS --gate-id architecture --approver "SA" --approved-at <ISO>
+eng continue TASK-49043 --harness <harness> --project individual-service
+# → plan → implement → review → audit → verify → DONE (exit 0)
+```
+
+| Điểm dừng (`stoppedBecause`) | Nghĩa |
+|---|---|
+| `DONE` | ticket xong — **exit 0**; mọi điểm dừng khác là exit 1 (chưa xong) |
+| `HUMAN_GATE` | cần approve (INV-05); lệnh `eng record ... HUMAN_APPROVAL` được in sẵn |
+| `EVIDENCE_OR_ERROR` | phase bị chặn bởi evidence gate, hoặc worker lỗi (recovery đã chạy) |
+| `NO_PROGRESS` | phase không đổi trạng thái — thường là phải `eng merge` (khi chạy `--parallel`) |
+| `NO_PHASE` | không còn phase nào chạy được từ status hiện tại |
+| `MAX_STEPS` | chạm trần `--max-steps` (mặc định 8) — chạy lại để tiếp |
+
+`--dry-run` chiếu các phase sẽ chạy (đọc gate từ config, không đổi state). `--json` trả
+`{ from, to, ok, blocked, stoppedBecause, steps[] }` để CI đọc. Không nới gate nào: mọi điểm dừng
+đều kèm việc phải làm tiếp.
+
 Ví dụ một vòng đời thật:
 
 ```bash
@@ -86,6 +114,37 @@ eng record TASK-49043 --type HUMAN_APPROVAL --status PASS \
   --gate-id architecture --approver "SA ..." --approved-at 2026-09-24T09:00:00Z
 eng advance TASK-49043 --to PLANNING      # ✓
 ```
+
+## Multi-repo (spec mục 9.5)
+
+Một ticket sửa **nhiều repo**, kể cả khi các repo nằm ở thư mục cha khác nhau. Không cần symlink
+hay gộp repo — `repoRoot` lấy từ env của từng project trong `config/projects.yaml`.
+
+```bash
+eng new PAY-101 --title "Đổi contract thanh toán" --risk HIGH \
+  --project payment-api --project payment-client   # --project lặp được; phần tử đầu là repo chính
+# plan.md: mỗi task khai "### Repo: payment-api" (hoặc payment-client)
+eng plan import PAY-101 --file plan.md
+eng context PAY-101 --all            # mỗi task lấy context từ REPO CỦA NÓ
+eng implement PAY-101                 # wave/parallel: worktree tạo trong repo của từng task
+eng verify PAY-101                    # build + test + scope cho MỌI repo của ticket
+eng record PAY-101 --type TEST --status PASS --project payment-api ...   # evidence phải gắn repo
+eng metrics PAY-101 --write           # có breakdown evidence theo repo
+```
+
+Quy tắc:
+
+| Chủ đề | Quy tắc |
+|---|---|
+| Khai repo | `task.json.projects[]` (ticket) và `plan.json.tasks[].repo` (`### Repo`); tên phải có trong `config/projects.yaml` — sai tên ⇒ lỗi rõ ràng (INV-06) |
+| Đường dẫn file | Tương đối so với repoRoot của repo task đó |
+| Conflict check (INV-11) | So theo **(repo, file)** và **(repo, symbol)** — cùng file ở hai repo khác nhau KHÔNG chặn parallel |
+| Evidence gate | `BUILD`/`TEST`/`SCOPE_VALIDATION` phải có cho **từng** repo (`evidence.project`); `SPEC_REVIEW`/`QUALITY_REVIEW`/`AUDIT`/`HUMAN_APPROVAL` là cấp ticket |
+| `--project` | Thu hẹp phạm vi về 1 repo (implement/verify). Repo của **task** luôn thắng `--project` khi compile context |
+| Merge | `eng merge` merge theo repo ghi trong `tasks/<TASK-NN>-changes.json`; thứ tự merge do người quyết |
+| Không khai gì | Hành vi cũ: repo lấy từ `--project` hoặc `defaultProject` |
+
+Thứ tự phụ thuộc xuyên repo dùng chính `### Dependencies` trong plan (task ở repo B phụ thuộc task ở repo A ⇒ B vào wave sau).
 
 ## Library API (spec mục 17)
 

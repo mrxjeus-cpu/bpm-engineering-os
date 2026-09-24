@@ -21,7 +21,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { WorktreeManager, type WorktreeInfo } from "../git/worktree.js";
 import { acquireLock, releaseLock } from "../state/lock.js";
 import { atomicWrite, readJsonFile } from "../workspace.js";
-import { collectMechanicalEvidence } from "./evidence.js";
+import { collectMechanicalEvidence, type MechanicalEvidence } from "./evidence.js";
+import { primaryProject, repoForTask, reposForState } from "../repos.js";
 import { PHASES, type PhaseName, type PhaseResult, type PhaseStep } from "./types.js";
 
 export interface RunPhaseOptions {
@@ -89,6 +90,54 @@ export class PhaseOrchestrator {
     return readTextFileIfExists(path.join(workstreamDir(taskId, this.#options.root), rel)) !== null;
   }
 
+  /**
+   * Repo hiệu lực cho một bước (spec 9.4).
+   * Có subTaskId ⇒ repo của task (task.repo, không khai thì repo chính); không có ⇒ --project.
+   */
+  #projectFor(taskId: string, subTaskId?: string): string | undefined {
+    if (subTaskId !== undefined) {
+      const plan = readPlan(taskId, this.#options.root);
+      const task = plan?.tasks.find((item) => item.id === subTaskId);
+      return repoForTask(task, this.#options.project);
+    }
+    return this.#options.project;
+  }
+
+  /** Repo của ticket; `--project` thu hẹp phạm vi về đúng repo đó khi nó nằm trong ticket. */
+  #ticketRepos(taskId: string): string[] {
+    const repos = reposForState(this.#store.get(taskId), readPlan(taskId, this.#options.root));
+    if (repos.length === 0) return [this.#options.project ?? primaryProject(undefined)];
+    if (this.#options.project !== undefined && repos.includes(this.#options.project)) return [this.#options.project];
+    return repos;
+  }
+
+  /**
+   * Thu evidence cơ học cho TỪNG repo của ticket — ticket multi-repo chỉ DONE khi
+   * mọi repo đều build/test/scope PASS (spec 9.4). Step name gắn nhãn repo để đọc log rõ.
+   */
+  async #collectForRepos(
+    ctx: Ctx,
+    repos: string[],
+    kinds: MechanicalEvidence[],
+  ): Promise<{ steps: PhaseStep[]; errors: string[]; mcpAvailable: boolean }> {
+    const steps: PhaseStep[] = [];
+    const errors: string[] = [];
+    let mcpAvailable = true;
+
+    for (const repo of repos) {
+      const collected = await collectMechanicalEvidence(ctx.taskId, {
+        project: repo,
+        kinds,
+        ...(this.#lockToken ? { env: { ENG_WORKSTREAM_LOCK_TOKEN: this.#lockToken } } : {}),
+      });
+      steps.push(...collected.steps.map((step) => ({ ...step, name: `${step.name}[${repo}]` })));
+      errors.push(...collected.errors.map((error) => `[${repo}] ${error}`));
+      mcpAvailable = mcpAvailable && collected.mcpAvailable;
+    }
+
+    return { steps, errors, mcpAvailable };
+  }
+
   #missingArtifacts(taskId: string, role: string, subTaskId?: string): string[] {
     const contract = agentContract(role);
     return contract.outputs
@@ -97,7 +146,8 @@ export class PhaseOrchestrator {
   }
 
   async #runAgent(ctx: Ctx, role: string, subTaskId?: string): Promise<boolean> {
-    this.#progress(`chạy agent ${role}${subTaskId ? ` cho ${subTaskId}` : ""}`);
+    const project = this.#projectFor(ctx.taskId, subTaskId);
+    this.#progress(`chạy agent ${role}${subTaskId ? ` cho ${subTaskId}` : ""}${project ? ` @ ${project}` : ""}`);
     let result;
     try {
       result = await this.#runner.run({
@@ -105,7 +155,7 @@ export class PhaseOrchestrator {
         role,
         ...(subTaskId ? { subTaskId } : {}),
         ...(this.#options.harness ? { harness: this.#options.harness } : {}),
-        ...(this.#options.project ? { project: this.#options.project } : {}),
+        ...(project ? { project } : {}),
         ...(this.#lockToken ? { lockToken: this.#lockToken } : {}),
       });
     } catch (error) {
@@ -332,7 +382,9 @@ export class PhaseOrchestrator {
   }
 
   async #analyze(ctx: Ctx): Promise<void> {
-    if (!this.#advance(ctx, "IMPACT_ANALYSIS")) return;
+    // Idempotent: ticket có thể đang ở IMPACT_ANALYSIS do lần chạy trước dừng giữa pha.
+    const state = this.#store.require(ctx.taskId);
+    if (state.status === "REQUIREMENT_ANALYSIS" && !this.#advance(ctx, "IMPACT_ANALYSIS")) return;
     const ok = await this.#runAgent(ctx, "impact");
     if (!ok) {
       await this.#handleFailure(ctx);
@@ -386,11 +438,17 @@ export class PhaseOrchestrator {
         ...(this.#options.root !== undefined ? { root: this.#options.root } : {}),
         ...(this.#exists(ctx.taskId, "architecture.md") ? { architectureRef: "architecture.md" } : {}),
         source: "plan.md",
+        ticketProjects: this.#store.get(ctx.taskId)?.projects ?? [],
       });
+      // Multi-repo (spec 9.4): repo trong plan trở thành repo của ticket.
+      const merged = [...new Set([...(this.#store.get(ctx.taskId)?.projects ?? []), ...imported.repos])];
+      if (merged.length > 0) {
+        this.#store.patch(ctx.taskId, { projects: merged }, { by: "runtime:phase", reason: `plan: repo = ${merged.join(", ")}` });
+      }
       ctx.steps.push({
         name: "plan:import",
         status: "ok",
-        detail: `${imported.taskCount} task · ${imported.waves} wave`,
+        detail: `${imported.taskCount} task · ${imported.waves} wave · repo ${imported.repos.join(", ")}`,
       });
       for (const warning of imported.warnings) ctx.warnings.push(warning);
     } catch (error) {
@@ -494,12 +552,10 @@ export class PhaseOrchestrator {
       return;
     }
 
-    // Evidence cơ học do runtime tự thu — không tin lời agent (INV-12)
-    const evidence = await collectMechanicalEvidence(ctx.taskId, {
-      kinds: ["tests", "scope"],
-      ...(this.#options.project ? { project: this.#options.project } : {}),
-      ...(this.#lockToken ? { env: { ENG_WORKSTREAM_LOCK_TOKEN: this.#lockToken } } : {}),
-    });
+    // Evidence cơ học do runtime tự thu — không tin lời agent (INV-12).
+    // Multi-repo: thu cho TỪNG repo của ticket (spec 9.4).
+    const repos = this.#ticketRepos(ctx.taskId);
+    const evidence = await this.#collectForRepos(ctx, repos, ["tests", "scope"]);
     ctx.steps.push(...evidence.steps);
     ctx.warnings.push(...evidence.errors);
 
@@ -531,11 +587,14 @@ export class PhaseOrchestrator {
 
   /** Wave song song trong worktree riêng: tạo worktree → chạy agent đồng thời → commit từng branch. */
   async #runWaveParallel(ctx: Ctx, manager: WorktreeManager, wave: WaveProgress): Promise<boolean> {
-    const repoRoot = resolveRepoRoot(this.#options.project);
-    if (repoRoot === null) {
-      ctx.steps.push({ name: `wave:${wave.index}`, status: "failed", detail: "chưa cấu hình repoRoot — không tạo được worktree" });
-      return false;
-    }
+    // Multi-repo (spec 9.4): mỗi task có worktree trong REPO CỦA NÓ — hai repo khác nhau
+    // thì cô lập tự nhiên, còn hai task cùng repo vẫn được tách worktree như trước.
+    const plan = readPlan(ctx.taskId, this.#options.root);
+    const target = (subTaskId: string): { project: string; repoRoot: string | null } => {
+      const task = plan?.tasks.find((item) => item.id === subTaskId);
+      const project = repoForTask(task, this.#options.project) ?? primaryProject(undefined);
+      return { project, repoRoot: resolveRepoRoot(project) };
+    };
 
     const limit = Math.max(1, Math.min(this.#options.concurrency ?? 3, wave.tasks.length));
     ctx.steps.push({
@@ -544,12 +603,21 @@ export class PhaseOrchestrator {
       detail: `PARALLEL x${limit} · worktree cô lập · ${wave.tasks.join(", ")}`,
     });
 
-    const created: Array<{ subTaskId: string; info?: WorktreeInfo }> = [];
+    const created: Array<{ subTaskId: string; project: string; repoRoot: string; info?: WorktreeInfo }> = [];
     for (const subTaskId of wave.tasks) {
+      const { project, repoRoot } = target(subTaskId);
+      if (repoRoot === null) {
+        ctx.steps.push({
+          name: `worktree:${subTaskId}`,
+          status: "failed",
+          detail: `chưa cấu hình repoRoot cho repo "${project}" — không tạo được worktree (INV-06: không đoán đường dẫn)`,
+        });
+        continue;
+      }
       try {
         const info = await manager.create(repoRoot, ctx.taskId, subTaskId);
-        created.push({ subTaskId, info });
-        ctx.steps.push({ name: `worktree:${subTaskId}`, status: "ok", detail: `${info.branch} → ${info.path}` });
+        created.push({ subTaskId, project, repoRoot, info });
+        ctx.steps.push({ name: `worktree:${subTaskId}`, status: "ok", detail: `${project} · ${info.branch} → ${info.path}` });
       } catch (error) {
         ctx.steps.push({
           name: `worktree:${subTaskId}`,
@@ -558,7 +626,9 @@ export class PhaseOrchestrator {
         });
       }
     }
-    const ready = created.filter((entry): entry is { subTaskId: string; info: WorktreeInfo } => entry.info !== undefined);
+    const ready = created.filter(
+      (entry): entry is { subTaskId: string; project: string; repoRoot: string; info: WorktreeInfo } => entry.info !== undefined,
+    );
     if (ready.length !== wave.tasks.length) {
       ctx.warnings.push("Không tạo đủ worktree — dừng wave song song, không chạy agent.");
       return false;
@@ -602,6 +672,8 @@ export class PhaseOrchestrator {
         schemaVersion: 1,
         taskId: ctx.taskId,
         subTaskId: entry.subTaskId,
+        project: entry.project,
+        repoRoot: entry.repoRoot,
         branch: entry.info.branch,
         baseRef: entry.info.baseRef,
         worktree: entry.info.path,
@@ -690,11 +762,9 @@ export class PhaseOrchestrator {
   }
 
   async #verify(ctx: Ctx): Promise<void> {
-    const evidence = await collectMechanicalEvidence(ctx.taskId, {
-      kinds: ["build", "tests", "scope"],
-      ...(this.#options.project ? { project: this.#options.project } : {}),
-      ...(this.#lockToken ? { env: { ENG_WORKSTREAM_LOCK_TOKEN: this.#lockToken } } : {}),
-    });
+    // Multi-repo: verification cuối phải phủ MỌI repo của ticket (spec 9.4).
+    const repos = this.#ticketRepos(ctx.taskId);
+    const evidence = await this.#collectForRepos(ctx, repos, ["build", "tests", "scope"]);
     ctx.steps.push(...evidence.steps);
     ctx.warnings.push(...evidence.errors);
 

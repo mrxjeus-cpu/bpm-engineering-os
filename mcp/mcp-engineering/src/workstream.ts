@@ -112,6 +112,8 @@ export function recordEvidence(
   }
   const payload: NewEvidence = {
     ...evidence,
+    // Multi-repo (spec 9.4): evidence phải nêu rõ thuộc repo nào để gate DONE kiểm được TỪNG repo.
+    ...(project ? { project } : {}),
     ...(gitSha ? { gitSha } : {}),
     producer: evidence.producer ?? "mcp:mcp-engineering",
   } as NewEvidence;

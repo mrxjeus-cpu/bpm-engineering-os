@@ -6,9 +6,11 @@ Repo này là **BPM Engineering OS** (skeleton Phase 1). Nguồn chân lý thi�
 
 | Cần gì | Xem ở đâu |
 |---|---|
+| Bắt đầu từ số 0 (cài đặt → doctor → smoke test không cần LLM) | `GETTING-STARTED.md` |
 | Nguyên tắc/bất biến | `CLAUDE.md`, spec mục 4 |
 | Kiến trúc & ADR | `ARCHITECTURE.md`, spec mục 5, 6 |
 | Cấu hình model/gate/risk/MCP/project | `config/*.yaml` |
+| Feature sửa nhiều repo (1 ticket = n repo) | spec mục 9.5 · `GETTING-STARTED.md` mục 9 · `config/projects.yaml` |
 | Hợp đồng dữ liệu state/evidence/plan | `schemas/*.schema.json` |
 | Tool repo/code/git/verification | `mcp/mcp-engineering/src/` |
 | Tool domain DOMAIN | `mcp/mcp-domain-core/src/` |

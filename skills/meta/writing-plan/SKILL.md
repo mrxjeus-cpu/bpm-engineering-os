@@ -17,7 +17,10 @@ priority: 2
    heading `## TASK-NN — tiêu đề`, `### Objective`, `### Files`, `### Symbols`,
    `### Dependencies` (ghi `none` nếu không có), `### Existing Pattern`, `### Acceptance Criteria`,
    `### Verification`.
+   Thêm `### Repo` (tên project trong `config/projects.yaml`) khi ticket sửa **nhiều repo**;
+   mỗi task chỉ được khai MỘT repo, đường dẫn trong `### Files` là tương đối so với repoRoot của repo đó.
 3. Ghi `### Dependencies` bằng mã task (`TASK-01, TASK-02`), không mô tả bằng lời.
+   Phụ thuộc **xuyên repo** cũng ghi ở đây (task ở repo B phụ thuộc task ở repo A ⇒ B vào wave sau).
 4. Mỗi task nêu **pattern có sẵn** sẽ tái sử dụng; nếu không tái sử dụng thì ghi lý do ở `### Deviation`.
 5. Giữ các task độc lập nhau ở mức tối đa để chạy được song song (tránh cùng file/symbol).
 6. Kiểm tra lại plan trước khi giao: `eng plan import <TASK_ID> --file plan.md` rồi `eng graph <TASK_ID>`.
@@ -29,4 +32,5 @@ priority: 2
 ## MUST NOT
 - Không viết task kiểu "implement feature X" chung chung.
 - Không để hai task trong cùng wave sửa cùng file/symbol (INV-11 sẽ chặn parallel).
+- Không khai nhiều repo trong một task; không trộn file của hai repo vào cùng `### Files`.
 - Không đưa ra plan mà bỏ qua pattern có sẵn trong codebase.

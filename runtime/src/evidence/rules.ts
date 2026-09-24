@@ -31,6 +31,20 @@ export const EVIDENCE_REQUIREMENTS: Partial<Record<TaskStatus, EvidenceRequireme
 /** Risk CRITICAL cần thêm human approval cuối (config/risk.yaml → effects.CRITICAL). */
 export const CRITICAL_FINAL_APPROVAL_GATE = "finalVerification";
 
+/**
+ * Evidence CHỈ có nghĩa trong một repo (spec 9.4): build/test/scope chạy trong một repo cụ thể.
+ * Ticket chạm nhiều repo ⇒ các loại này phải có cho TỪNG repo.
+ *
+ * Ngược lại, review / audit / human approval là đánh giá trên TOÀN BỘ thay đổi của ticket
+ * (một người/agent review cả feature), nên vẫn là yêu cầu cấp ticket — nếu bắt theo từng repo
+ * sẽ chặn oan và không phản ánh cách review thật.
+ */
+const REPO_SCOPED_EVIDENCE: EvidenceType[] = ["BUILD", "TEST", "SCOPE_VALIDATION"];
+
+function isRepoScopped(requirement: EvidenceRequirement): boolean {
+  return requirement.types.some((type) => REPO_SCOPED_EVIDENCE.includes(type));
+}
+
 export interface GateEvaluation {
   ok: boolean;
   target: TaskStatus;
@@ -41,7 +55,7 @@ export interface GateEvaluation {
 export function evaluateEvidenceGate(
   target: TaskStatus,
   evidence: Evidence[],
-  options: { risk?: RiskLevel } = {},
+  options: { risk?: RiskLevel; projects?: string[] } = {},
 ): GateEvaluation {
   const requirements = [...(EVIDENCE_REQUIREMENTS[target] ?? [])];
 
@@ -56,15 +70,45 @@ export function evaluateEvidenceGate(
   const satisfied: string[] = [];
   const missing: string[] = [];
 
-  for (const requirement of requirements) {
+  // Cấp ticket: review / audit / human approval.
+  const ticketLevel = requirements.filter((requirement) => !isRepoScopped(requirement));
+  // Cấp repo: build / test / scope — phải có cho từng repo khi ticket có >= 2 repo.
+  const perRepo = requirements.filter(isRepoScopped);
+
+  const matches = (requirement: EvidenceRequirement, item: Evidence): boolean =>
+    requirement.types.includes(item.type) && item.status === requirement.status;
+
+  for (const requirement of ticketLevel) {
+    const needsGate = requirement.types.includes("HUMAN_APPROVAL");
     const found = evidence.find(
-      (item) =>
-        requirement.types.includes(item.type) &&
-        item.status === requirement.status &&
-        (requirement.types[0] !== "HUMAN_APPROVAL" || item.gateId === CRITICAL_FINAL_APPROVAL_GATE),
+      (item) => matches(requirement, item) && (!needsGate || item.gateId === CRITICAL_FINAL_APPROVAL_GATE),
     );
     if (found) satisfied.push(`${requirement.types.join("|")}=${requirement.status}`);
     else missing.push(`${requirement.types.join("|")}=${requirement.status} — ${requirement.description}`);
+  }
+
+  /**
+   * Multi-repo (spec 9.4): ticket chạm >= 2 repo thì evidence cơ học phải có cho TỪNG repo,
+   * và phải nêu rõ `project`. Ticket 1 repo giữ nguyên hành vi cũ (evidence không cần gắn repo).
+   */
+  const projects = [...new Set((options.projects ?? []).filter((name) => name !== ""))];
+
+  if (projects.length <= 1) {
+    for (const requirement of perRepo) {
+      const found = evidence.find((item) => matches(requirement, item));
+      if (found) satisfied.push(`${requirement.types.join("|")}=${requirement.status}`);
+      else missing.push(`${requirement.types.join("|")}=${requirement.status} — ${requirement.description}`);
+    }
+    return { ok: missing.length === 0, target, satisfied, missing };
+  }
+
+  for (const project of projects) {
+    for (const requirement of perRepo) {
+      const found = evidence.find((item) => matches(requirement, item) && item.project === project);
+      const label = `${requirement.types.join("|")}=${requirement.status}`;
+      if (found) satisfied.push(`${project}: ${label}`);
+      else missing.push(`${project}: ${label} — ${requirement.description} (evidence chưa gắn repo "${project}")`);
+    }
   }
 
   return { ok: missing.length === 0, target, satisfied, missing };

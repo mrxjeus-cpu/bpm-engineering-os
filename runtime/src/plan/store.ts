@@ -6,6 +6,7 @@ import type { Plan, PlanTask, SubTaskStatus } from "../types.js";
 import { atomicWrite, readJsonFile, readTextFileIfExists, workstreamDir } from "../workspace.js";
 import { parsePlanMarkdown } from "./parser.js";
 import { acquireLock, releaseLock } from "../state/lock.js";
+import { applyPlanRepos } from "../repos.js";
 import { attachWaves } from "../executor/waves.js";
 
 export const PLAN_FILE = "plan.json";
@@ -76,16 +77,18 @@ export interface ImportPlanResult {
   waves: number;
   warnings: string[];
   source: string;
+  /** Repo của ticket sau khi import (repo chính trước — spec 9.4). */
+  repos: string[];
 }
 
 /**
- * Import plan từ markdown: parse → attach waves → validate schema → ghi plan.json.
+ * Import plan từ markdown: parse → gán repo → attach waves → validate schema → ghi plan.json.
  * Dùng chung cho `eng plan import` và phase `eng plan` (một implementation duy nhất).
  */
 export function importPlanFromMarkdown(
   taskId: string,
   markdown: string,
-  options: { root?: string; architectureRef?: string; source?: string } = {},
+  options: { root?: string; architectureRef?: string; source?: string; ticketProjects?: string[] } = {},
 ): ImportPlanResult {
   const parsed = parsePlanMarkdown(markdown);
   if (parsed.errors.length > 0) {
@@ -103,6 +106,16 @@ export function importPlanFromMarkdown(
     ...(options.source ? { source: options.source } : {}),
     ...(options.architectureRef ? { architectureRef: options.architectureRef } : {}),
   };
+
+  // Multi-repo: gán repo chính cho task không khai, và từ chối repo lạ (INV-06).
+  const applied = applyPlanRepos(base, options.ticketProjects ?? []);
+  if (applied.errors.length > 0) {
+    throw new EngError("INVALID_REPO", `plan.md khai repo không hợp lệ (${applied.errors.length} lỗi), chưa import.`, {
+      hint: "Khai project có thật trong config/projects.yaml ở mục '### Repo', hoặc bỏ trống để dùng repo chính của ticket.",
+      details: { errors: applied.errors },
+    });
+  }
+
   const { plan, execution } = attachWaves(base);
   writePlan(plan, options.root);
   const dir = workstreamDir(taskId, options.root);
@@ -112,8 +125,9 @@ export function importPlanFromMarkdown(
     plan,
     taskCount: plan.tasks.length,
     waves: execution.waves.length,
-    warnings: parsed.warnings,
+    warnings: [...parsed.warnings, ...applied.warnings],
     source: options.source ?? PLAN_MARKDOWN,
+    repos: applied.repos,
   };
 }
 

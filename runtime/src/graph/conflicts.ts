@@ -19,6 +19,22 @@ function normalizeFile(file: string): string {
   return file.trim().replace(/\\/g, "/").replace(/^\.\//, "");
 }
 
+/**
+ * Khoá so trùng phải gồm REPO (spec 9.4): hai task cùng sửa `src/.../A.java` nhưng ở
+ * hai repo khác nhau KHÔNG phải conflict — nếu không tách, multi-repo sẽ bị chặn parallel oan.
+ */
+function repoTags(task: PlanTask): string[] {
+  return task.repo === undefined || task.repo === "" ? [""] : [task.repo];
+}
+
+function scopedKey(task: PlanTask, value: string): string {
+  return `${task.repo ?? ""}::${value}`;
+}
+
+function scopedLabel(task: PlanTask, value: string): string {
+  return task.repo === undefined || task.repo === "" ? value : `${task.repo}:${value}`;
+}
+
 function isMigrationFile(file: string): boolean {
   const normalized = normalizeFile(file);
   return MIGRATION_HINT.test(normalized) || /\.sql$/i.test(normalized);
@@ -42,8 +58,11 @@ export function detectConflicts(waveTasks: PlanTask[]): Conflict[] {
   const conflicts: Conflict[] = [];
 
   for (const [a, b] of pairs(waveTasks)) {
-    const filesA = new Set((a.files ?? []).map(normalizeFile));
-    const sharedFiles = (b.files ?? []).map(normalizeFile).filter((file) => filesA.has(file));
+    const filesA = new Set((a.files ?? []).map((file) => scopedKey(a, normalizeFile(file))));
+    const sharedFiles = (b.files ?? [])
+      .map((file) => ({ key: scopedKey(b, normalizeFile(file)), label: scopedLabel(b, normalizeFile(file)) }))
+      .filter((entry) => filesA.has(entry.key))
+      .map((entry) => entry.label);
     if (sharedFiles.length > 0) {
       conflicts.push({
         type: "FILE_OVERLAP",
@@ -53,8 +72,11 @@ export function detectConflicts(waveTasks: PlanTask[]): Conflict[] {
       });
     }
 
-    const symbolsA = new Set((a.symbols ?? []).map((symbol) => symbol.trim()));
-    const sharedSymbols = (b.symbols ?? []).map((symbol) => symbol.trim()).filter((symbol) => symbolsA.has(symbol));
+    const symbolsA = new Set((a.symbols ?? []).map((symbol) => scopedKey(a, symbol.trim())));
+    const sharedSymbols = (b.symbols ?? [])
+      .map((symbol) => ({ key: scopedKey(b, symbol.trim()), label: scopedLabel(b, symbol.trim()) }))
+      .filter((entry) => symbolsA.has(entry.key))
+      .map((entry) => entry.label);
     if (sharedSymbols.length > 0) {
       conflicts.push({
         type: "SYMBOL_OVERLAP",
@@ -65,15 +87,26 @@ export function detectConflicts(waveTasks: PlanTask[]): Conflict[] {
     }
   }
 
-  const migrationTasks = waveTasks
-    .map((task) => ({ id: task.id, files: (task.files ?? []).filter(isMigrationFile) }))
-    .filter((entry) => entry.files.length > 0);
-  if (migrationTasks.length > 1) {
+  // Migration chỉ cạnh tranh thứ tự trong CÙNG một repo.
+  const migrationByRepo = new Map<string, Array<{ id: string; files: string[] }>>();
+  for (const task of waveTasks) {
+    const files = (task.files ?? []).filter(isMigrationFile);
+    if (files.length === 0) continue;
+    for (const repo of repoTags(task)) {
+      const bucket = migrationByRepo.get(repo) ?? [];
+      bucket.push({ id: task.id, files });
+      migrationByRepo.set(repo, bucket);
+    }
+  }
+  for (const [repo, migrationTasks] of migrationByRepo) {
+    if (migrationTasks.length <= 1) continue;
     conflicts.push({
       type: "MIGRATION_ORDER",
       severity: "WARN",
       tasks: migrationTasks.map((entry) => entry.id),
-      detail: `nhiều task cùng thêm migration (${migrationTasks.map((entry) => `${entry.id}: ${entry.files.length}`).join(", ")}) — cần chốt thứ tự áp dụng`,
+      detail:
+        `${migrationTasks.length} task cùng thêm migration${repo === "" ? "" : ` trong repo ${repo}`} ` +
+        `(${migrationTasks.map((entry) => `${entry.id}: ${entry.files.length}`).join(", ")}) — cần chốt thứ tự áp dụng`,
     });
   }
 
